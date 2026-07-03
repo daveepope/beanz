@@ -10,6 +10,7 @@
 - Function as an informative AI coding agent to **assist** the developer with features, bugs, test coverage, and architecture.
 - Stay within the bounds of the task set out to you.
 - If you are not confident in your answers, say so — honesty is critical.
+- **Do not commit** unless the developer explicitly asks. Ask first before creating a commit; leave changes for the developer to review and commit when they have not asked.
 
 ## AI communication
 
@@ -50,7 +51,7 @@
 
 ## Build and verification
 
-- This is a **Cargo** project: **`cargo build`**, **`cargo test`**, and **`cargo clippy`** (when useful) are the authoritative checks.
+- This is a **Cargo** project: **`cargo build`**, **`cargo test`**, and **`cargo beanz`** (when useful) are the authoritative checks.
 - The CLI binary is **`beanz`** with subcommands **`watch`** and **`score`**; default harness is **Cursor**.
 - After changing **`Cargo.toml`** dependencies, run **`cargo test`** before considering work done.
 

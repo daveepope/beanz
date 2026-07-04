@@ -9,7 +9,7 @@ use crate::{
     refresh_block, resolve_preset, AgentHarness, ComplexityDelta, DebtTable, Harness, WeightPreset,
 };
 
-const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--home <path>] [--workspace <path>] [--watch-ticks <n>] [--lenient] [--strict] [--verbose] [session.jsonl]\n  default command: watch\n  session path alone: watch that file (beanz path/to/session.jsonl)\n  env: BEANZ_LENIENT=1 or BEANZ_STRICT=1 when no --lenient/--strict\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
+const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--home <path>] [--workspace <path>] [--watch-ticks <n>] [--lenient] [--strict] [--verbose] [--help] [session.jsonl]\n  default command: watch\n  session path alone: watch that file (beanz path/to/session.jsonl)\n  env: BEANZ_LENIENT=1 or BEANZ_STRICT=1 when no --lenient/--strict\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct DisplayOptions {
@@ -30,7 +30,11 @@ pub(crate) struct ParsedArgs {
 
 pub fn run(args: Vec<String>) -> ExitCode {
     let parsed = match parse_args(&args) {
-        Ok(parsed) => parsed,
+        Ok(None) => {
+            println!("{USAGE}");
+            return ExitCode::SUCCESS;
+        }
+        Ok(Some(parsed)) => parsed,
         Err(message) => {
             eprintln!("{message}");
             eprintln!("{USAGE}");
@@ -101,7 +105,7 @@ pub fn run(args: Vec<String>) -> ExitCode {
     code
 }
 
-pub(crate) fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
+pub(crate) fn parse_args(args: &[String]) -> Result<Option<ParsedArgs>, String> {
     let mut harness = "cursor".to_string();
     let mut verbose = false;
     let mut lenient = false;
@@ -149,6 +153,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
             "--verbose" | "-v" => verbose = true,
             "--lenient" => lenient = true,
             "--strict" => strict = true,
+            "--help" | "-h" => return Ok(None),
             other if other.starts_with('-') => {
                 return Err(format!("unknown flag '{other}'"));
             }
@@ -170,7 +175,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
         _ => return Err("expected at most a command and a session path".to_string()),
     };
 
-    Ok(ParsedArgs {
+    Ok(Some(ParsedArgs {
         command,
         harness,
         path,
@@ -180,7 +185,7 @@ pub(crate) fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
         verbose,
         lenient,
         strict,
-    })
+    }))
 }
 
 fn home_for_run(parsed: &ParsedArgs) -> PathBuf {
@@ -372,7 +377,7 @@ mod tests {
 
     #[test]
     fn parse_args_empty_argv_defaults_watch() {
-        let parsed = parse_args(&[]).unwrap();
+        let parsed = parse_args(&[]).unwrap().unwrap();
         assert_eq!(parsed.command, "watch");
         assert_eq!(parsed.harness, "cursor");
         assert!(parsed.path.is_none());
@@ -386,6 +391,7 @@ mod tests {
             "--verbose".to_string(),
             "--strict".to_string(),
         ])
+        .unwrap()
         .unwrap();
         assert_eq!(parsed.command, "score");
         assert!(parsed.verbose);
@@ -394,7 +400,9 @@ mod tests {
 
     #[test]
     fn parse_args_bare_path_defaults_watch() {
-        let parsed = parse_args(&["/tmp/session.jsonl".to_string()]).unwrap();
+        let parsed = parse_args(&["/tmp/session.jsonl".to_string()])
+            .unwrap()
+            .unwrap();
         assert_eq!(parsed.command, "watch");
         assert_eq!(parsed.path.as_deref(), Some("/tmp/session.jsonl"));
     }
@@ -417,6 +425,18 @@ mod tests {
     #[test]
     fn parse_args_unknown_flag_returns_error() {
         assert!(parse_args(&["--foo".to_string()]).is_err());
+    }
+
+    #[test]
+    fn parse_args_help_flag_returns_none() {
+        assert!(parse_args(&["--help".to_string()]).unwrap().is_none());
+        assert!(parse_args(&["-h".to_string()]).unwrap().is_none());
+    }
+
+    #[test]
+    fn run_help_flag_exits_0() {
+        assert_eq!(run(vec!["--help".to_string()]), ExitCode::SUCCESS);
+        assert_eq!(run(vec!["-h".to_string()]), ExitCode::SUCCESS);
     }
 
     #[test]
@@ -489,6 +509,7 @@ mod tests {
             "--watch-ticks".to_string(),
             "3".to_string(),
         ])
+        .unwrap()
         .unwrap();
         assert_eq!(parsed.workspace.as_deref(), Some("/tmp/ws"));
         assert_eq!(parsed.watch_ticks, Some(3));
@@ -501,6 +522,7 @@ mod tests {
             "--workspace".to_string(),
             "/tmp/ws".to_string(),
         ])
+        .unwrap()
         .unwrap();
         assert_eq!(
             workspace_for_run(&parsed),

@@ -1,4 +1,4 @@
-use beanz::{debt_bar, format_debt_table, grade, meter_pct, Features, Grade};
+use beanz::{debt_bar, format_debt_table, grade, meter_pct, Features, Grade, WeightProfile};
 
 const GREEN: &str = "\x1b[32m";
 const YELLOW: &str = "\x1b[33m";
@@ -67,7 +67,7 @@ fn debt_bar_color_severe_uses_red() {
 
 #[test]
 fn format_debt_table_uses_box_drawing_borders() {
-    let table = format_debt_table(38.0, 0.0, &Features::default(), false);
+    let table = format_debt_table(38.0, 0.0, &Features::default(), &WeightProfile::normal(), false);
     assert!(table.starts_with('╭'));
     assert!(table.contains('├'));
     assert!(table.contains("COGNITIVE DEBT TYPE"));
@@ -78,7 +78,7 @@ fn format_debt_table_uses_box_drawing_borders() {
 
 #[test]
 fn format_debt_table_bar_width_is_24_chars() {
-    let table = format_debt_table(0.0, 0.0, &Features::default(), false);
+    let table = format_debt_table(0.0, 0.0, &Features::default(), &WeightProfile::normal(), false);
     let bar: String = table
         .lines()
         .find(|line| line.contains("code cognitive debt"))
@@ -91,7 +91,7 @@ fn format_debt_table_bar_width_is_24_chars() {
 
 #[test]
 fn format_debt_table_shows_debt_in_meter_column() {
-    let table = format_debt_table(50.0, 0.0, &Features::default(), false);
+    let table = format_debt_table(50.0, 0.0, &Features::default(), &WeightProfile::normal(), false);
     let row = table.lines().find(|line| line.contains("code cognitive debt")).unwrap();
     assert!(row.contains(" 50 "));
     let filled = row.chars().filter(|ch| *ch == '█').count();

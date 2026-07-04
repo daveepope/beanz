@@ -7,6 +7,7 @@ use crate::complexity::ComplexityDelta;
 use crate::cursor::CursorHarness;
 use crate::features::Features;
 use crate::scoring::{DebtSample, Report};
+use crate::strictness::WeightPreset;
 
 pub trait Harness {
     fn start(&mut self) -> notify::Result<()>;
@@ -52,15 +53,20 @@ impl AgentHarness {
         }
     }
 
-    pub fn open(self, path: PathBuf) -> Box<dyn Harness> {
+    pub fn open(self, path: PathBuf, preset: WeightPreset) -> Box<dyn Harness> {
         let workspace_root = crate::workspace::workspace_root()
             .unwrap_or_else(|| PathBuf::from("."));
-        self.open_in(path, workspace_root)
+        self.open_in(path, workspace_root, preset)
     }
 
-    pub fn open_in(self, path: PathBuf, workspace_root: PathBuf) -> Box<dyn Harness> {
+    pub fn open_in(
+        self,
+        path: PathBuf,
+        workspace_root: PathBuf,
+        preset: WeightPreset,
+    ) -> Box<dyn Harness> {
         match self {
-            AgentHarness::Cursor => Box::new(CursorHarness::new(path, workspace_root)),
+            AgentHarness::Cursor => Box::new(CursorHarness::new(path, workspace_root, preset)),
         }
     }
 

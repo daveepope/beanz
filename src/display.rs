@@ -2,6 +2,7 @@ use std::io::{self, Write};
 
 use crate::features::{transcript_chars, Features};
 use crate::scoring::{grade, middle_burial, truncation, Grade};
+use crate::strictness::WeightProfile;
 
 const BAR_WIDTH: usize = 24;
 const DEBT_LABEL_WIDTH: usize = 3;
@@ -19,6 +20,12 @@ const CYCLOMATIC_WEIGHT: f64 = 1.0;
 const SPEC_GAP_WEIGHT: f64 = 0.08;
 const SPEC_GAP_CAP: f64 = 12.0;
 const GRADE_LOW: f64 = 25.0;
+
+const TRUNCATION_SUGGESTION: f64 = 0.5;
+const MIDDLE_SUGGESTION: f64 = 2.0;
+const SPEC_GAP_SUGGESTION: f64 = 2.0;
+const CYCLOMATIC_SUGGESTION: f64 = 2.0;
+const STRUCTURAL_SUGGESTION: f64 = 3.0;
 
 const RESET: &str = "\x1b[0m";
 const GREEN: &str = "\x1b[32m";
@@ -55,19 +62,26 @@ impl DebtTable {
         }
     }
 
-    pub fn format(&self, code: f64, artifact: f64, features: &Features, color: bool) -> String {
+    pub fn format(
+        &self,
+        code: f64,
+        artifact: f64,
+        features: &Features,
+        profile: &WeightProfile,
+        color: bool,
+    ) -> String {
         let code_lines = self.debt_lines(
             "code cognitive debt",
             code,
             code_feature_lines(features),
-            code_suggestions(features, code),
+            code_suggestions(features, code, profile),
             color,
         );
         let artifact_lines = self.debt_lines(
             "artifact cognitive debt",
             artifact,
             artifact_feature_lines(features),
-            artifact_suggestions(features, artifact),
+            artifact_suggestions(features, artifact, profile),
             color,
         );
         let mut out = String::new();
@@ -188,8 +202,14 @@ pub fn debt_meter(debt: f64, color: bool) -> String {
     }
 }
 
-pub fn format_debt_table(code: f64, artifact: f64, features: &Features, color: bool) -> String {
-    DebtTable::new().format(code, artifact, features, color)
+pub fn format_debt_table(
+    code: f64,
+    artifact: f64,
+    features: &Features,
+    profile: &WeightProfile,
+    color: bool,
+) -> String {
+    DebtTable::new().format(code, artifact, features, profile, color)
 }
 
 pub fn refresh_block(previous_lines: &mut usize, block: &str) {
@@ -209,8 +229,9 @@ pub fn refresh_block(previous_lines: &mut usize, block: &str) {
 fn shared_feature_lines(features: &Features) -> Vec<FeatureLine> {
     let log_lines = features.user_turns + features.assistant_turns;
     let context_kib = transcript_chars(features) as f64 / 1024.0;
-    let trunc = truncation(features);
-    let middle = middle_burial(features);
+    let baseline = WeightProfile::normal();
+    let trunc = truncation(features, &baseline);
+    let middle = middle_burial(features, &baseline);
     vec![
         FeatureLine {
             label: "context",
@@ -277,52 +298,61 @@ fn format_spec_gap(gap: f64) -> String {
     }
 }
 
-fn code_suggestions(features: &Features, score: f64) -> Vec<&'static str> {
+fn code_suggestions(features: &Features, score: f64, profile: &WeightProfile) -> Vec<&'static str> {
     if score < GRADE_LOW {
         return vec!["none"];
     }
-    let trunc = truncation(features);
-    let middle = middle_burial(features);
+    let trunc = truncation(features, profile);
+    let middle = middle_burial(features, profile);
     let cyclomatic_score =
-        CYCLOMATIC_WEIGHT * features.cyclomatic_introduced.max(0) as f64;
-    let structural_score = STRUCTURAL_WEIGHT * features.files_delta.max(0) as f64;
-    let spec_gap_score = (SPEC_GAP_WEIGHT * features.spec_gap).min(SPEC_GAP_CAP);
+        CYCLOMATIC_WEIGHT * features.cyclomatic_introduced.max(0) as f64 * profile.cyclomatic;
+    let structural_score =
+        STRUCTURAL_WEIGHT * features.files_delta.max(0) as f64 * profile.structural;
+    let spec_gap_score =
+        (SPEC_GAP_WEIGHT * features.spec_gap * profile.spec_gap).min(SPEC_GAP_CAP);
+    let scale = profile.suggestion_threshold;
 
     let mut ranked: Vec<(&'static str, f64)> = Vec::new();
-    if trunc.risk >= 0.5 {
+    if trunc.risk >= TRUNCATION_SUGGESTION * scale {
         ranked.push(("truncation_risk", trunc.risk));
     }
-    if middle.risk >= 2.0 {
+    if middle.risk >= MIDDLE_SUGGESTION * scale {
         ranked.push(("lost_in_the_middle_risk", middle.risk));
     }
-    if spec_gap_score >= 2.0 {
+    if spec_gap_score >= SPEC_GAP_SUGGESTION * scale {
         ranked.push(("spec_gap_risk", spec_gap_score));
     }
-    if cyclomatic_score >= 2.0 {
+    if cyclomatic_score >= CYCLOMATIC_SUGGESTION * scale {
         ranked.push(("cyclomatic_risk", cyclomatic_score));
     }
-    if structural_score >= 3.0 {
+    if structural_score >= STRUCTURAL_SUGGESTION * scale {
         ranked.push(("structural_risk", structural_score));
     }
     top_suggestions(ranked, 5)
 }
 
-fn artifact_suggestions(features: &Features, score: f64) -> Vec<&'static str> {
+fn artifact_suggestions(
+    features: &Features,
+    score: f64,
+    profile: &WeightProfile,
+) -> Vec<&'static str> {
     if score < GRADE_LOW {
         return vec!["none"];
     }
-    let trunc = truncation(features);
-    let middle = middle_burial(features);
-    let spec_gap_score = (SPEC_GAP_WEIGHT * features.spec_gap).min(SPEC_GAP_CAP);
+    let trunc = truncation(features, profile);
+    let middle = middle_burial(features, profile);
+    let spec_gap_score =
+        (SPEC_GAP_WEIGHT * features.spec_gap * profile.spec_gap).min(SPEC_GAP_CAP);
+    let scale = profile.suggestion_threshold;
 
     let mut ranked: Vec<(&'static str, f64)> = Vec::new();
-    if trunc.risk >= 0.5 {
+    if trunc.risk >= TRUNCATION_SUGGESTION * scale {
         ranked.push(("truncation_risk", trunc.risk));
     }
-    if middle.risk >= 2.0 {
+    if middle.risk >= MIDDLE_SUGGESTION * scale {
         ranked.push(("lost_in_the_middle_risk", middle.risk));
     }
-    if spec_gap_score >= 2.0 {
+    if spec_gap_score >= SPEC_GAP_SUGGESTION * scale {
         ranked.push(("spec_gap_risk", spec_gap_score));
     }
     top_suggestions(ranked, 3)
@@ -437,6 +467,12 @@ fn grade_color(grade: Grade) -> &'static str {
 mod tests {
     use super::*;
     use crate::features::Features;
+    use crate::strictness::WeightPreset;
+    use crate::strictness::WeightProfile;
+
+    fn normal() -> WeightProfile {
+        WeightProfile::normal()
+    }
 
     #[test]
     fn debt_bar_full_width_at_ceiling() {
@@ -465,7 +501,7 @@ mod tests {
             probe_hits: 1,
             ..Features::default()
         };
-        let table = format_debt_table(38.0, 12.0, &features, false);
+        let table = format_debt_table(38.0, 12.0, &features, &normal(), false);
         assert!(table.contains("FEATURES"));
         assert!(table.contains("context"));
         assert!(table.contains("truncation_risk"));
@@ -493,7 +529,7 @@ mod tests {
             probe_hits: 0,
             ..Features::default()
         };
-        let table = format_debt_table(60.0, 40.0, &features, false);
+        let table = format_debt_table(60.0, 40.0, &features, &normal(), false);
         assert!(table.contains("SUGGESTIONS"));
         assert!(table.contains("truncation_risk"));
         assert!(table.contains("lost_in_the_middle_risk"));
@@ -511,19 +547,19 @@ mod tests {
             bytes_delta: 0,
             ..Features::default()
         };
-        let table = format_debt_table(10.0, 35.0, &features, false);
+        let table = format_debt_table(10.0, 35.0, &features, &normal(), false);
         assert!(table.contains("lost_in_the_middle_risk"));
     }
 
     #[test]
     fn format_debt_table_shows_none_when_score_low() {
-        let table = format_debt_table(5.0, 0.0, &Features::default(), false);
+        let table = format_debt_table(5.0, 0.0, &Features::default(), &normal(), false);
         assert!(table.contains("none"));
     }
 
     #[test]
     fn format_debt_table_bar_fill_matches_debt() {
-        let table = format_debt_table(12.0, 0.0, &Features::default(), false);
+        let table = format_debt_table(12.0, 0.0, &Features::default(), &normal(), false);
         let row = table
             .lines()
             .find(|line| line.contains("code cognitive debt"))
@@ -535,9 +571,24 @@ mod tests {
     #[test]
     fn debt_table_reuses_static_borders() {
         let table = DebtTable::new();
-        let first = table.format(10.0, 0.0, &Features::default(), false);
-        let second = table.format(50.0, 20.0, &Features::default(), false);
+        let first = table.format(10.0, 0.0, &Features::default(), &normal(), false);
+        let second = table.format(50.0, 20.0, &Features::default(), &normal(), false);
         assert_eq!(first.lines().next(), second.lines().next());
         assert_eq!(first.lines().nth(1), second.lines().nth(1));
+    }
+
+    #[test]
+    fn strict_suggestions_fire_before_lenient() {
+        let features = Features {
+            prompt_chars: 120_000,
+            user_turns: 2,
+            assistant_turns: 2,
+            max_autonomy_run: 0,
+            ..Features::default()
+        };
+        let lenient = code_suggestions(&features, 30.0, &WeightPreset::Lenient.profile());
+        let strict = code_suggestions(&features, 30.0, &WeightPreset::Strict.profile());
+        assert!(!lenient.contains(&"truncation_risk"));
+        assert!(strict.contains(&"truncation_risk"));
     }
 }

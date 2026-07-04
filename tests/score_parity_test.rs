@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 use beanz::cursor::edit_ops_from_line;
 use beanz::EditOp;
 use beanz::score_snapshot::{reconstruct_baseline, touched_from_edit_ops};
-use beanz::AgentHarness;
+use beanz::{AgentHarness, WeightPreset};
 use harness_factory::HarnessFactory;
 
 struct CliMetrics {
@@ -111,7 +111,7 @@ fn score_matches_watch_final_sample() {
     let factory = HarnessFactory::cursor();
     let session_path = factory.session().user("why this approach").to_file();
 
-    let mut watch = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone());
+    let mut watch = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), WeightPreset::Normal);
     watch.start().unwrap();
 
     fs::write(
@@ -173,7 +173,7 @@ fn read_only_session_zero_disk_metrics() {
         .user("explain more")
         .to_file();
 
-    let mut harness = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone());
+    let mut harness = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), WeightPreset::Normal);
     harness.start().unwrap();
     let report = harness.calculate();
     harness.stop();
@@ -193,7 +193,7 @@ fn silent_disk_edit_raises_metrics() {
     let src = workspace.join("src");
     let path = HarnessFactory::cursor().session().to_file();
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone());
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
     harness.start().unwrap();
 
     fs::write(

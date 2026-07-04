@@ -1,11 +1,11 @@
-use beanz::{middle_burial, truncation, Features, Grade};
+use beanz::{Features, Grade, WeightProfile, middle_burial, truncation};
 
 #[test]
 fn truncation_grade_low_below_quarter_fill() {
     let built = truncation(&Features {
         prompt_chars: 90_000,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     assert_eq!(built.grade, Grade::Low);
     assert!(built.fill_ratio < 0.25);
 }
@@ -15,7 +15,7 @@ fn truncation_grade_moderate_at_quarter_fill() {
     let built = truncation(&Features {
         prompt_chars: 110_000,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     assert_eq!(built.grade, Grade::Moderate);
 }
 
@@ -24,7 +24,7 @@ fn truncation_grade_high_at_half_fill() {
     let built = truncation(&Features {
         prompt_chars: 210_000,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     assert_eq!(built.grade, Grade::High);
 }
 
@@ -33,13 +33,13 @@ fn truncation_grade_severe_above_three_quarter_fill() {
     let built = truncation(&Features {
         prompt_chars: 310_000,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     assert_eq!(built.grade, Grade::Severe);
 }
 
 #[test]
 fn middle_burial_grade_low_on_empty_session() {
-    let built = middle_burial(&Features::default());
+    let built = middle_burial(&Features::default(), &WeightProfile::normal());
     assert_eq!(built.grade, Grade::Low);
     assert!(built.risk < 2.0);
 }
@@ -53,7 +53,7 @@ fn middle_burial_grade_moderate_on_spread_session() {
         assistant_chars: 6_000,
         max_autonomy_run: 1,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     assert_eq!(built.grade, Grade::Moderate);
     assert!((2.0..6.0).contains(&built.risk));
 }
@@ -67,7 +67,7 @@ fn middle_burial_grade_high_on_wide_spread() {
         assistant_chars: 23_000,
         max_autonomy_run: 3,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     assert_eq!(built.grade, Grade::High);
     assert!((6.0..15.0).contains(&built.risk));
 }
@@ -81,7 +81,7 @@ fn middle_burial_grade_severe_on_heavy_reads() {
         read_est_chars: 140_000,
         max_autonomy_run: 5,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     assert_eq!(built.grade, Grade::Severe);
     assert!(built.risk >= 15.0);
 }
@@ -100,7 +100,7 @@ fn middle_burial_rises_with_autonomy() {
         max_autonomy_run: 10,
         ..base.clone()
     };
-    assert!(middle_burial(&deep).risk > middle_burial(&base).risk);
+    assert!(middle_burial(&deep, &WeightProfile::normal()).risk > middle_burial(&base, &WeightProfile::normal()).risk);
 }
 
 #[test]
@@ -112,7 +112,7 @@ fn middle_burial_rises_with_read_est_chars() {
         assistant_chars: 4_000,
         max_autonomy_run: 4,
         ..Features::default()
-    });
+    }, &WeightProfile::normal());
     let heavy = middle_burial(&Features {
         read_est_chars: 132_000,
         ..Features {
@@ -123,6 +123,6 @@ fn middle_burial_rises_with_read_est_chars() {
             max_autonomy_run: 4,
             ..Features::default()
         }
-    });
+    }, &WeightProfile::normal());
     assert!(heavy.risk > bare.risk);
 }

@@ -4,7 +4,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use beanz::AgentHarness;
+use beanz::{AgentHarness, WeightPreset};
 use harness_factory::HarnessFactory;
 
 fn empty_workspace(tag: &str) -> PathBuf {
@@ -36,7 +36,7 @@ fn calculate_disk_dump_raises_metrics_then_deletions_restore_baseline() {
     let workspace = workspace_with_src("disk-traj");
     let src = workspace.join("src");
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone());
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
     harness.start().unwrap();
 
     let idle = harness.calculate();
@@ -101,7 +101,7 @@ fn start_then_calculate_reflects_session() {
     let source = workspace.join("app.rs");
     fs::write(&source, "fn main() {}").unwrap();
 
-    let mut harness = selector.open_in(path.clone(), workspace.clone());
+    let mut harness = selector.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
     harness.start().unwrap();
     let updated = "fn main() { if true {} if false {} if true {} }";
     fs::write(&source, updated).unwrap();
@@ -143,7 +143,7 @@ fn calculate_empty_session_returns_zero_debt() {
     let path = HarnessFactory::cursor().session().to_file();
     let workspace = empty_workspace("empty");
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone());
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
     harness.start().unwrap();
     let report = harness.calculate();
     harness.stop();
@@ -161,7 +161,7 @@ fn calculate_picks_up_appended_user_turn_without_notify() {
     let path = HarnessFactory::cursor().session().user("first").to_file();
     let workspace = empty_workspace("append");
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone());
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
     harness.start().unwrap();
     assert_eq!(harness.calculate().features.user_turns, 1);
 
@@ -188,7 +188,7 @@ fn calculate_appends_timestamped_debt_samples() {
         .to_file();
     let workspace = empty_workspace("series");
 
-    let mut harness = selector.open_in(path.clone(), workspace.clone());
+    let mut harness = selector.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
     harness.start().unwrap();
     let first = harness.calculate();
     let second = harness.calculate();

@@ -4,9 +4,9 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use beanz::scoring::Report;
-use beanz::{refresh_block, DebtTable, AgentHarness, ComplexityDelta, Harness};
+use beanz::{refresh_block, resolve_preset, DebtTable, AgentHarness, ComplexityDelta, Harness, WeightPreset};
 
-const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--verbose] [session.jsonl]\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
+const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--lenient] [--strict] [--verbose] [session.jsonl]\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 
 struct DisplayOptions {
@@ -32,6 +32,15 @@ fn main() -> ExitCode {
         }
     };
 
+    let preset = match resolve_preset(parsed.lenient, parsed.strict) {
+        Ok(preset) => preset,
+        Err(message) => {
+            eprintln!("{message}");
+            eprintln!("{USAGE}");
+            return ExitCode::from(2);
+        }
+    };
+
     let path = match resolve_session(selector, &parsed) {
         Ok(path) => path,
         Err(code) => return code,
@@ -41,14 +50,14 @@ fn main() -> ExitCode {
         verbose: parsed.verbose,
     };
 
-    let mut harness = selector.open(path.clone());
+    let mut harness = selector.open(path.clone(), preset);
     let code = match parsed.command.as_str() {
         "score" => {
             if let Err(error) = harness.start() {
                 eprintln!("failed to start session: {error}");
                 return ExitCode::FAILURE;
             }
-            print_report(&harness.calculate(), &display);
+            print_report(&harness.calculate(), &display, preset);
             ExitCode::SUCCESS
         }
         "watch" => {
@@ -57,7 +66,7 @@ fn main() -> ExitCode {
                 eprintln!("failed to start session: {error}");
                 return ExitCode::FAILURE;
             }
-            run_watch(harness.as_ref(), &display);
+            run_watch(harness.as_ref(), &display, preset);
             ExitCode::SUCCESS
         }
         other => {
@@ -110,11 +119,15 @@ struct ParsedArgs {
     harness: String,
     path: Option<String>,
     verbose: bool,
+    lenient: bool,
+    strict: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
     let mut harness = "cursor".to_string();
     let mut verbose = false;
+    let mut lenient = false;
+    let mut strict = false;
     let mut positionals: Vec<String> = Vec::new();
     let mut index = 0;
 
@@ -128,6 +141,8 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
                 harness = value.clone();
             }
             "--verbose" | "-v" => verbose = true,
+            "--lenient" => lenient = true,
+            "--strict" => strict = true,
             other => positionals.push(other.to_string()),
         }
         index += 1;
@@ -151,17 +166,19 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
         harness,
         path,
         verbose,
+        lenient,
+        strict,
     })
 }
 
-fn run_watch(harness: &dyn Harness, display: &DisplayOptions) {
+fn run_watch(harness: &dyn Harness, display: &DisplayOptions, preset: WeightPreset) {
     let mut last = String::new();
     let mut screen_lines = 0usize;
     let color = std::io::stdout().is_terminal();
     let table = DebtTable::new();
     loop {
         let report = harness.poll();
-        let mut block = format_report(&report, color, display.verbose, &table);
+        let mut block = format_report(&report, color, display.verbose, preset, &table);
         for delta in harness.complexity_deltas() {
             block.push('\n');
             block.push_str(&format_delta(&delta));
@@ -200,12 +217,12 @@ fn display_path(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn print_report(report: &Report, display: &DisplayOptions) {
+fn print_report(report: &Report, display: &DisplayOptions, preset: WeightPreset) {
     let color = std::io::stdout().is_terminal();
     let table = DebtTable::new();
     println!(
         "{}",
-        format_report(report, color, display.verbose, &table)
+        format_report(report, color, display.verbose, preset, &table)
     );
 }
 
@@ -213,21 +230,26 @@ fn format_report(
     report: &Report,
     color: bool,
     verbose: bool,
+    preset: WeightPreset,
     table: &DebtTable,
 ) -> String {
     let features = &report.features;
-    let mut lines = vec![table.format(
+    let profile = preset.profile();
+    let mut lines = vec![format!("mode: {}", preset.label())];
+    lines.push(table.format(
         report.session_debt,
         report.artifact_debt,
         features,
+        &profile,
         color,
-    )];
+    ));
     if verbose {
         use beanz::transcript_chars;
         let transcript_kib = transcript_chars(features) as f64 / 1024.0;
         let log_lines = features.user_turns + features.assistant_turns;
         lines.push(format!(
-            "transcript={transcript_kib:.1}KiB prompts={} log_lines={} autonomy={}/{} bytes={} cyclomatic={} structural={} spec_gap={:.1} probes={} reads={} shells={} edits={}B",
+            "preset={} transcript={transcript_kib:.1}KiB prompts={} log_lines={} autonomy={}/{} bytes={} cyclomatic={} structural={} spec_gap={:.1} probes={} reads={} shells={} edits={}B",
+            preset.label(),
             features.user_turns,
             log_lines,
             features.autonomy_streak,

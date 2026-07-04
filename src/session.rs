@@ -8,6 +8,7 @@ use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use crate::edits::EditOp;
 use crate::features::{extract, Features};
 use crate::scoring::{report, Report};
+use crate::strictness::WeightPreset;
 use crate::transcript::Event;
 
 pub type LineParser = fn(&str) -> Option<Event>;
@@ -106,7 +107,7 @@ impl SessionEngine {
     }
 
     pub fn report(&self) -> Report {
-        report(self.features())
+        report(self.features(), WeightPreset::Normal)
     }
 
     fn ingest(&self) {

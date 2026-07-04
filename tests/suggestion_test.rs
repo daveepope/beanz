@@ -1,4 +1,4 @@
-use beanz::{format_debt_table, Features};
+use beanz::{format_debt_table, Features, WeightProfile};
 
 const BELOW: f64 = 10.0;
 const ABOVE: f64 = 30.0;
@@ -14,7 +14,7 @@ fn code_suggestions_text(table: &str) -> String {
             capture = true;
         }
         if capture && line.contains('│') && !line.contains("COGNITIVE DEBT TYPE") {
-            if let Some(cell) = line.split('|').nth(5) {
+            if let Some(cell) = line.split('│').nth(5) {
                 let text = cell.trim();
                 if !text.is_empty() {
                     out.push(text.to_string());
@@ -35,7 +35,7 @@ fn format_debt_table_suggestions_none_when_debt_low() {
         max_autonomy_run: 5,
         ..Features::default()
     };
-    let table = format_debt_table(BELOW, BELOW, &features, false);
+    let table = format_debt_table(BELOW, BELOW, &features, &WeightProfile::normal(), false);
     assert_eq!(code_suggestions_text(&table), "none");
 }
 
@@ -48,7 +48,7 @@ fn format_debt_table_code_suggestions_truncation_risk() {
         max_autonomy_run: 0,
         ..Features::default()
     };
-    let table = format_debt_table(ABOVE, BELOW, &features, false);
+    let table = format_debt_table(ABOVE, BELOW, &features, &WeightProfile::normal(), false);
     assert!(code_suggestions_text(&table).contains("truncation_risk"));
 }
 
@@ -62,7 +62,7 @@ fn format_debt_table_code_suggestions_lost_in_the_middle_risk() {
         max_autonomy_run: 5,
         ..Features::default()
     };
-    let table = format_debt_table(ABOVE, BELOW, &features, false);
+    let table = format_debt_table(ABOVE, BELOW, &features, &WeightProfile::normal(), false);
     assert!(code_suggestions_text(&table).contains("lost_in_the_middle_risk"));
 }
 
@@ -74,7 +74,7 @@ fn format_debt_table_code_suggestions_spec_gap_risk() {
         spec_gap: 200.0,
         ..Features::default()
     };
-    let table = format_debt_table(ABOVE, BELOW, &features, false);
+    let table = format_debt_table(ABOVE, BELOW, &features, &WeightProfile::normal(), false);
     assert!(code_suggestions_text(&table).contains("spec_gap_risk"));
 }
 
@@ -84,7 +84,7 @@ fn format_debt_table_code_suggestions_cyclomatic_risk() {
         cyclomatic_introduced: 5,
         ..Features::default()
     };
-    let table = format_debt_table(ABOVE, BELOW, &features, false);
+    let table = format_debt_table(ABOVE, BELOW, &features, &WeightProfile::normal(), false);
     assert!(code_suggestions_text(&table).contains("cyclomatic_risk"));
 }
 
@@ -94,7 +94,7 @@ fn format_debt_table_code_suggestions_structural_risk() {
         files_delta: 2,
         ..Features::default()
     };
-    let table = format_debt_table(ABOVE, BELOW, &features, false);
+    let table = format_debt_table(ABOVE, BELOW, &features, &WeightProfile::normal(), false);
     assert!(code_suggestions_text(&table).contains("structural_risk"));
 }
 
@@ -105,7 +105,7 @@ fn format_debt_table_artifact_suggestions_omit_code_risks() {
         files_delta: 10,
         ..Features::default()
     };
-    let table = format_debt_table(BELOW, ABOVE, &features, false);
+    let table = format_debt_table(BELOW, ABOVE, &features, &WeightProfile::normal(), false);
     let artifact_start = table.find("artifact cognitive debt").unwrap();
     let artifact = &table[artifact_start..];
     let end = artifact.find('╰').unwrap_or(artifact.len());
@@ -117,7 +117,7 @@ fn format_debt_table_artifact_suggestions_omit_code_risks() {
             capture = true;
         }
         if capture && line.contains('│') {
-            if let Some(cell) = line.split('|').nth(5) {
+            if let Some(cell) = line.split('│').nth(5) {
                 let text = cell.trim();
                 if !text.is_empty() {
                     out.push(text);
@@ -140,7 +140,7 @@ fn format_debt_table_shows_severe_middle_in_features() {
         max_autonomy_run: 5,
         ..Features::default()
     };
-    let table = format_debt_table(BELOW, BELOW, &features, false);
+    let table = format_debt_table(BELOW, BELOW, &features, &WeightProfile::normal(), false);
     assert!(table.contains("lost_in_the_middle_risk"));
     assert!(table.contains("severe"));
 }

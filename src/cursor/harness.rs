@@ -6,6 +6,7 @@ use crate::complexity::{ComplexityDelta, ComplexityEngine};
 use crate::features::Features;
 use crate::harness::Harness;
 use crate::scoring::{report, DebtSample, Report};
+use crate::strictness::WeightPreset;
 use crate::session::SessionEngine;
 
 use super::transcript::{edit_ops_from_line, parse_line, read_est_chars_from_line};
@@ -14,10 +15,11 @@ pub struct CursorHarness {
     engine: SessionEngine,
     complexity: ComplexityEngine,
     history: Arc<Mutex<Vec<DebtSample>>>,
+    preset: WeightPreset,
 }
 
 impl CursorHarness {
-    pub fn new(path: PathBuf, workspace_root: PathBuf) -> Self {
+    pub fn new(path: PathBuf, workspace_root: PathBuf, preset: WeightPreset) -> Self {
         Self {
             engine: SessionEngine::new(
                 path,
@@ -28,6 +30,7 @@ impl CursorHarness {
             ),
             complexity: ComplexityEngine::new(workspace_root),
             history: Arc::new(Mutex::new(Vec::new())),
+            preset,
         }
     }
 }
@@ -89,7 +92,7 @@ impl Harness for CursorHarness {
 impl CursorHarness {
     fn sample(&self) -> Report {
         self.engine.sync_from_disk();
-        let report = report(self.features());
+        let report = report(self.features(), self.preset);
         if let Ok(mut guard) = self.history.lock() {
             guard.push(DebtSample {
                 at_ms: now_ms(),

@@ -1,4 +1,4 @@
-use beanz::{artifact_debt, score, session_debt, Features};
+use beanz::{Features, WeightProfile, artifact_debt, score, session_debt};
 
 fn idle() -> Features {
     Features::default()
@@ -52,25 +52,25 @@ fn trajectory_dump_raises_debt_above_idle() {
 
 #[test]
 fn trajectory_deletions_lower_artifact_below_dump() {
-    let dump = artifact_debt(&agent_code_dump());
-    let trimmed = artifact_debt(&after_deletions());
+    let dump = artifact_debt(&agent_code_dump(), &WeightProfile::normal());
+    let trimmed = artifact_debt(&after_deletions(), &WeightProfile::normal());
     assert!(trimmed < dump, "trimmed {trimmed} should be below dump {dump}");
 }
 
 #[test]
 fn trajectory_probes_lower_artifact_below_deletions() {
-    let trimmed = artifact_debt(&after_deletions());
-    let challenged = artifact_debt(&after_probes());
+    let trimmed = artifact_debt(&after_deletions(), &WeightProfile::normal());
+    let challenged = artifact_debt(&after_probes(), &WeightProfile::normal());
     assert!(challenged < trimmed, "challenged {challenged} should be below trimmed {trimmed}");
 }
 
 #[test]
 fn trajectory_longer_prompts_raise_session_debt() {
-    let before = session_debt(&after_deletions());
+    let before = session_debt(&after_deletions(), &WeightProfile::normal());
     let mut prompts_only = after_deletions();
     prompts_only.prompt_chars = 20_000;
     prompts_only.user_turns = 12;
-    let prompts_score = session_debt(&prompts_only);
+    let prompts_score = session_debt(&prompts_only, &WeightProfile::normal());
     assert!(
         prompts_score > before,
         "prompt volume alone should raise session debt: {before} -> {prompts_score}"
@@ -79,8 +79,8 @@ fn trajectory_longer_prompts_raise_session_debt() {
 
 #[test]
 fn trajectory_probes_do_not_lower_session_debt() {
-    let before = session_debt(&after_deletions());
-    let after = session_debt(&after_probes());
+    let before = session_debt(&after_deletions(), &WeightProfile::normal());
+    let after = session_debt(&after_probes(), &WeightProfile::normal());
     assert!(after >= before);
 }
 
@@ -92,14 +92,14 @@ fn trajectory_cleanup_below_baseline_returns_zero_artifact() {
         cyclomatic_introduced: -50,
         ..Features::default()
     };
-    assert_eq!(artifact_debt(&cleanup), 0.0);
+    assert_eq!(artifact_debt(&cleanup, &WeightProfile::normal()), 0.0);
 }
 
 #[test]
 fn trajectory_artifact_can_fall_while_session_rises() {
-    assert!(artifact_debt(&after_deletions()) < artifact_debt(&agent_code_dump()));
+    assert!(artifact_debt(&after_deletions(), &WeightProfile::normal()) < artifact_debt(&agent_code_dump(), &WeightProfile::normal()));
     let mut growing = after_deletions();
     growing.prompt_chars = 50_000;
     growing.assistant_chars = 50_000;
-    assert!(session_debt(&growing) > session_debt(&after_deletions()));
+    assert!(session_debt(&growing, &WeightProfile::normal()) > session_debt(&after_deletions(), &WeightProfile::normal()));
 }

@@ -2,7 +2,6 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
@@ -16,19 +15,31 @@ pub type EditLineParser = fn(&str) -> Vec<EditOp>;
 
 pub struct SessionEngine {
     path: PathBuf,
+    workspace: PathBuf,
     parse: LineParser,
     edit_parse: EditLineParser,
+    read_est: fn(&str, &Path) -> usize,
     state: Arc<Mutex<Vec<Event>>>,
+    edit_ops: Arc<Mutex<Vec<EditOp>>>,
     watcher: Option<RecommendedWatcher>,
 }
 
 impl SessionEngine {
-    pub fn new(path: PathBuf, parse: LineParser, edit_parse: EditLineParser) -> Self {
+    pub fn new(
+        path: PathBuf,
+        workspace: PathBuf,
+        parse: LineParser,
+        edit_parse: EditLineParser,
+        read_est: fn(&str, &Path) -> usize,
+    ) -> Self {
         Self {
             path,
+            workspace,
             parse,
             edit_parse,
+            read_est,
             state: Arc::new(Mutex::new(Vec::new())),
+            edit_ops: Arc::new(Mutex::new(Vec::new())),
             watcher: None,
         }
     }
@@ -37,32 +48,23 @@ impl SessionEngine {
         &self.path
     }
 
-    pub fn prepare(&mut self) {
-        self.ingest();
-    }
-
     pub fn edit_ops(&self) -> Vec<EditOp> {
-        read_edit_ops(&self.path, self.edit_parse).unwrap_or_default()
-    }
-
-    pub fn created(&self) -> SystemTime {
-        fs::metadata(&self.path)
-            .ok()
-            .and_then(|metadata| metadata.created().ok())
-            .or_else(|| {
-                fs::metadata(&self.path)
-                    .ok()
-                    .and_then(|metadata| metadata.modified().ok())
-            })
-            .unwrap_or(SystemTime::UNIX_EPOCH)
+        self.edit_ops
+            .lock()
+            .map(|guard| guard.clone())
+            .unwrap_or_default()
     }
 
     pub fn start(&mut self) -> notify::Result<()> {
         self.ingest();
 
         let path = self.path.clone();
+        let workspace = self.workspace.clone();
         let parse = self.parse;
+        let read_est = self.read_est;
+        let edit_parse = self.edit_parse;
         let state = Arc::clone(&self.state);
+        let edit_ops = Arc::clone(&self.edit_ops);
         let directory = path
             .parent()
             .filter(|parent| !parent.as_os_str().is_empty())
@@ -74,9 +76,14 @@ impl SessionEngine {
                 return;
             };
             if event.paths.iter().any(|changed| changed == &path) {
-                if let Ok(events) = read_events(&path, parse) {
+                if let Ok((events, ops)) =
+                    read_session(&path, parse, edit_parse, &workspace, read_est)
+                {
                     if let Ok(mut guard) = state.lock() {
                         *guard = events;
+                    }
+                    if let Ok(mut guard) = edit_ops.lock() {
+                        *guard = ops;
                     }
                 }
             }
@@ -90,15 +97,12 @@ impl SessionEngine {
         self.watcher = None;
     }
 
+    pub fn sync_from_disk(&self) {
+        self.ingest();
+    }
+
     pub fn features(&self) -> Features {
-        let events = match read_events(&self.path, self.parse) {
-            Ok(events) => events,
-            Err(_) => self.state.lock().expect("session state poisoned").clone(),
-        };
-        if let Ok(mut guard) = self.state.lock() {
-            *guard = events.clone();
-        }
-        extract(&events)
+        extract(&self.state.lock().expect("session state poisoned").clone())
     }
 
     pub fn report(&self) -> Report {
@@ -106,20 +110,35 @@ impl SessionEngine {
     }
 
     fn ingest(&self) {
-        if let Ok(events) = read_events(&self.path, self.parse) {
+        if let Ok((events, ops)) =
+            read_session(&self.path, self.parse, self.edit_parse, &self.workspace, self.read_est)
+        {
             if let Ok(mut guard) = self.state.lock() {
                 *guard = events;
+            }
+            if let Ok(mut guard) = self.edit_ops.lock() {
+                *guard = ops;
             }
         }
     }
 }
 
-fn read_edit_ops(path: &Path, edit_parse: EditLineParser) -> io::Result<Vec<EditOp>> {
+fn read_session(
+    path: &Path,
+    parse: LineParser,
+    edit_parse: EditLineParser,
+    workspace: &Path,
+    read_est: fn(&str, &Path) -> usize,
+) -> io::Result<(Vec<Event>, Vec<EditOp>)> {
     let contents = fs::read_to_string(path)?;
-    Ok(contents.lines().flat_map(edit_parse).collect())
-}
-
-fn read_events(path: &Path, parse: LineParser) -> io::Result<Vec<Event>> {
-    let contents = fs::read_to_string(path)?;
-    Ok(contents.lines().filter_map(parse).collect())
+    let mut events = Vec::new();
+    let mut ops = Vec::new();
+    for line in contents.lines() {
+        ops.extend(edit_parse(line));
+        if let Some(mut event) = parse(line) {
+            event.read_est_chars = read_est(line, workspace);
+            events.push(event);
+        }
+    }
+    Ok((events, ops))
 }

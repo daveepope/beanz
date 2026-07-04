@@ -16,7 +16,7 @@ pub struct Features {
     pub spec_gap: f64,
     pub bytes_delta: i64,
     pub files_delta: i64,
-    pub complexity_introduced: i64,
+    pub cyclomatic_introduced: i64,
 }
 
 pub fn transcript_chars(features: &Features) -> usize {
@@ -41,6 +41,7 @@ pub fn extract(events: &[Event]) -> Features {
         features.assistant_chars += event.assistant_chars;
         features.edit_bytes += event.edit_bytes;
         features.read_ops += event.read_ops;
+        features.read_est_chars += event.read_est_chars;
         features.shell_ops += event.shell_ops;
     }
 

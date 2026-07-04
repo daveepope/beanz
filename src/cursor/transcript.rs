@@ -10,7 +10,7 @@ use crate::transcript::{record_assistant_text, record_tool, record_user_text, Ev
 const EDIT_TOOLS: [&str; 3] = ["Write", "StrReplace", "Edit"];
 const READ_TOOLS: [&str; 3] = ["Read", "Grep", "Glob"];
 const SHELL_TOOLS: [&str; 2] = ["Shell", "Bash"];
-const DEFAULT_READ_LINE_CAP: usize = 250;
+const DEFAULT_READ_LINE_CAP: usize = 50;
 const AVG_LINE_CHARS: usize = 80;
 
 pub fn edit_ops_from_line(line: &str) -> Vec<EditOp> {
@@ -183,8 +183,15 @@ fn absorb_read_est(total: &mut usize, content: &Value, workspace: &Path) {
             .get("limit")
             .and_then(Value::as_u64)
             .map(|value| value as usize);
+        if is_transcript_path(path_value) {
+            continue;
+        }
         *total += estimate_read_chars(resolve_path(workspace, path_value), limit);
     }
+}
+
+fn is_transcript_path(path_value: &str) -> bool {
+    path_value.ends_with(".jsonl") && path_value.contains("agent-transcripts")
 }
 
 fn resolve_path(workspace: &Path, path_value: &str) -> PathBuf {

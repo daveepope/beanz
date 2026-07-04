@@ -198,3 +198,29 @@ fn disk_scan_trajectory_rises_then_falls() {
 
     fs::remove_dir_all(&root).ok();
 }
+
+#[test]
+fn engine_detects_new_file_after_start() {
+    use beanz::complexity::ComplexityEngine;
+
+    let root = std::env::temp_dir().join(format!(
+        "beanz-engine-new-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+    ));
+    fs::create_dir_all(root.join("src")).unwrap();
+
+    let mut engine = ComplexityEngine::new(root.clone());
+    engine.start().unwrap();
+    fs::write(
+        root.join("src").join("Fresh.java"),
+        "class Fresh { void a(int x) { if (x > 0) {} } }",
+    )
+    .unwrap();
+    engine.sync_from_session(&[]);
+
+    assert!(engine.bytes_delta() > 0);
+    assert!(engine.introduced() > 0);
+    engine.stop();
+    fs::remove_dir_all(&root).ok();
+}

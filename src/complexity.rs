@@ -1,10 +1,13 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use tree_sitter::{Node, Parser};
+
+use crate::edits::EditOp;
+use crate::score_snapshot::{reconstruct_baseline, touched_from_edit_ops};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
@@ -300,10 +303,13 @@ pub fn compute_deltas(
 
 #[derive(Default)]
 struct DiskState {
+    session_open: HashMap<PathBuf, u32>,
+    session_open_bytes: HashMap<PathBuf, u64>,
     baseline: HashMap<PathBuf, u32>,
     current: HashMap<PathBuf, u32>,
     baseline_bytes: HashMap<PathBuf, u64>,
     current_bytes: HashMap<PathBuf, u64>,
+    disk_touched: HashSet<PathBuf>,
 }
 
 pub struct ComplexityEngine {
@@ -321,32 +327,42 @@ impl ComplexityEngine {
         }
     }
 
-    pub fn start_for_score(
-        &mut self,
-        session_start: std::time::SystemTime,
-        edit_ops: &[crate::edits::EditOp],
-    ) -> notify::Result<()> {
-        let maps = crate::score_snapshot::reconstruct_baseline(&self.root, session_start, edit_ops);
+    pub fn start(&mut self) -> notify::Result<()> {
+        let complexity = baseline_complexity(&self.root);
+        let bytes = baseline_bytes(&self.root);
+        if let Ok(mut guard) = self.state.lock() {
+            guard.session_open = complexity;
+            guard.session_open_bytes = bytes;
+        }
+        self.attach_watcher()
+    }
+
+    pub fn sync_from_session(&self, edit_ops: &[EditOp]) {
+        let maps = {
+            let guard = self.state.lock().expect("complexity state poisoned");
+            let mut touched = touched_from_edit_ops(&self.root, edit_ops);
+            touched.extend(guard.disk_touched.iter().cloned());
+            touched.extend(paths_changed_since_open(
+                &self.root,
+                &guard.session_open_bytes,
+            ));
+            reconstruct_baseline(
+                &self.root,
+                edit_ops,
+                &touched,
+                &guard.session_open,
+                &guard.session_open_bytes,
+            )
+        };
         if let Ok(mut guard) = self.state.lock() {
             guard.baseline = maps.baseline;
             guard.current = maps.current;
             guard.baseline_bytes = maps.baseline_bytes;
             guard.current_bytes = maps.current_bytes;
         }
-        Ok(())
     }
 
-    pub fn start(&mut self) -> notify::Result<()> {
-        let baseline = baseline_complexity(&self.root);
-        let baseline_bytes = baseline_bytes(&self.root);
-
-        if let Ok(mut guard) = self.state.lock() {
-            guard.current = baseline.clone();
-            guard.baseline = baseline;
-            guard.current_bytes = baseline_bytes.clone();
-            guard.baseline_bytes = baseline_bytes;
-        }
-
+    fn attach_watcher(&mut self) -> notify::Result<()> {
         let state = Arc::clone(&self.state);
         let root = self.root.clone();
         let mut watcher =
@@ -358,36 +374,11 @@ impl ComplexityEngine {
                     if is_ignored_descendant(&root, &path) {
                         continue;
                     }
-                    let is_source = Language::from_path(&path).is_some();
-                    let value = if is_source {
-                        complexity_of(&path)
-                    } else {
-                        None
-                    };
-                    let size = if is_source && path.is_file() {
-                        Some(file_bytes(&path))
-                    } else {
-                        None
-                    };
+                    if Language::from_path(&path).is_none() {
+                        continue;
+                    }
                     if let Ok(mut guard) = state.lock() {
-                        match value {
-                            Some(value) => {
-                                guard.current.insert(path.clone(), value);
-                            }
-                            None if is_source => {
-                                guard.current.remove(&path);
-                            }
-                            None => {}
-                        }
-                        match size {
-                            Some(size) => {
-                                guard.current_bytes.insert(path, size);
-                            }
-                            None if is_source => {
-                                guard.current_bytes.remove(&path);
-                            }
-                            None => {}
-                        }
+                        guard.disk_touched.insert(path);
                     }
                 }
             })?;
@@ -423,4 +414,25 @@ impl ComplexityEngine {
         let guard = self.state.lock().expect("complexity state poisoned");
         compute_deltas(&guard.baseline, &guard.current)
     }
+}
+
+fn paths_changed_since_open(
+    root: &Path,
+    session_open_bytes: &HashMap<PathBuf, u64>,
+) -> HashSet<PathBuf> {
+    let mut changed = HashSet::new();
+    let current_files: HashSet<PathBuf> = collect_source_files(root).into_iter().collect();
+
+    for path in &current_files {
+        let size = file_bytes(path);
+        if session_open_bytes.get(path) != Some(&size) {
+            changed.insert(path.clone());
+        }
+    }
+    for path in session_open_bytes.keys() {
+        if !current_files.contains(path) {
+            changed.insert(path.clone());
+        }
+    }
+    changed
 }

@@ -7,11 +7,11 @@ fn idle() -> Features {
 fn agent_code_dump() -> Features {
     Features {
         user_turns: 3,
-        max_autonomy_run: 12,
-        bytes_delta: 48_000,
-        files_delta: 35,
-        complexity_introduced: 84,
-        read_ops: 38,
+        max_autonomy_run: 1,
+        bytes_delta: 800,
+        files_delta: 2,
+        cyclomatic_introduced: 2,
+        read_ops: 10,
         shell_ops: 1,
         ..Features::default()
     }
@@ -20,13 +20,12 @@ fn agent_code_dump() -> Features {
 fn after_deletions() -> Features {
     Features {
         user_turns: 3,
-        max_autonomy_run: 12,
-        bytes_delta: 8_000,
-        files_delta: 8,
-        complexity_introduced: 24,
-        read_ops: 38,
+        max_autonomy_run: 1,
+        bytes_delta: 400,
+        files_delta: 1,
+        cyclomatic_introduced: 1,
+        read_ops: 10,
         shell_ops: 1,
-        probe_hits: 1,
         ..Features::default()
     }
 }
@@ -35,13 +34,13 @@ fn after_probes() -> Features {
     Features {
         user_turns: 5,
         prompt_chars: 4_000,
-        max_autonomy_run: 12,
-        bytes_delta: 8_000,
-        files_delta: 8,
-        complexity_introduced: 24,
-        read_ops: 38,
+        max_autonomy_run: 1,
+        bytes_delta: 400,
+        files_delta: 1,
+        cyclomatic_introduced: 1,
+        read_ops: 10,
         shell_ops: 1,
-        probe_hits: 8,
+        probe_hits: 4,
         ..Features::default()
     }
 }
@@ -90,7 +89,7 @@ fn trajectory_cleanup_below_baseline_returns_zero_artifact() {
     let cleanup = Features {
         bytes_delta: -20_000,
         files_delta: -30,
-        complexity_introduced: -50,
+        cyclomatic_introduced: -50,
         ..Features::default()
     };
     assert_eq!(artifact_debt(&cleanup), 0.0);

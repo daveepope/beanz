@@ -4,15 +4,13 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use beanz::scoring::Report;
-use beanz::{format_debt_line, transcript_chars, AgentHarness, ComplexityDelta, Harness};
+use beanz::{refresh_block, DebtTable, AgentHarness, ComplexityDelta, Harness};
 
-const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [session.jsonl]\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
+const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--verbose] [session.jsonl]\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
-const DEBT_CEILING: f64 = 100.0;
 
-struct DisplayPeaks {
-    session: f64,
-    artifact: f64,
+struct DisplayOptions {
+    verbose: bool,
 }
 
 fn main() -> ExitCode {
@@ -39,23 +37,27 @@ fn main() -> ExitCode {
         Err(code) => return code,
     };
 
+    let display = DisplayOptions {
+        verbose: parsed.verbose,
+    };
+
     let mut harness = selector.open(path.clone());
     let code = match parsed.command.as_str() {
         "score" => {
-            if let Err(error) = harness.start_for_score() {
-                eprintln!("failed to start session: {error}");
-                return ExitCode::FAILURE;
-            }
-            print_report(&harness.calculate(), None);
-            ExitCode::SUCCESS
-        }
-        "watch" => {
             if let Err(error) = harness.start() {
                 eprintln!("failed to start session: {error}");
                 return ExitCode::FAILURE;
             }
+            print_report(&harness.calculate(), &display);
+            ExitCode::SUCCESS
+        }
+        "watch" => {
             eprintln!("watching {} [{}] (ctrl-c to stop)", path.display(), selector.name());
-            run_watch(harness.as_ref());
+            if let Err(error) = harness.start() {
+                eprintln!("failed to start session: {error}");
+                return ExitCode::FAILURE;
+            }
+            run_watch(harness.as_ref(), &display);
             ExitCode::SUCCESS
         }
         other => {
@@ -107,10 +109,12 @@ struct ParsedArgs {
     command: String,
     harness: String,
     path: Option<String>,
+    verbose: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
     let mut harness = "cursor".to_string();
+    let mut verbose = false;
     let mut positionals: Vec<String> = Vec::new();
     let mut index = 0;
 
@@ -123,6 +127,7 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
                     .ok_or_else(|| "missing value for --harness".to_string())?;
                 harness = value.clone();
             }
+            "--verbose" | "-v" => verbose = true,
             other => positionals.push(other.to_string()),
         }
         index += 1;
@@ -145,29 +150,32 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
         command,
         harness,
         path,
+        verbose,
     })
 }
 
-fn run_watch(harness: &dyn Harness) {
+fn run_watch(harness: &dyn Harness, display: &DisplayOptions) {
     let mut last = String::new();
-    let mut peak_session = 0.0f64;
-    let mut peak_artifact = 0.0f64;
+    let mut screen_lines = 0usize;
     let color = std::io::stdout().is_terminal();
+    let table = DebtTable::new();
     loop {
-        let report = harness.calculate();
-        peak_session = peak_session.max(report.session_debt);
-        peak_artifact = peak_artifact.max(report.artifact_debt);
-        let peaks = DisplayPeaks {
-            session: peak_session,
-            artifact: peak_artifact,
-        };
-        let mut block = format_report(&report, Some(&peaks), color);
+        let report = harness.poll();
+        let mut block = format_report(&report, color, display.verbose, &table);
         for delta in harness.complexity_deltas() {
             block.push('\n');
             block.push_str(&format_delta(&delta));
         }
         if block != last {
-            println!("{block}");
+            if color && screen_lines > 0 {
+                refresh_block(&mut screen_lines, &block);
+            } else {
+                if screen_lines > 0 {
+                    let _ = print!("\x1b[{screen_lines}A\x1b[J");
+                }
+                println!("{block}");
+                screen_lines = block.lines().count().max(1);
+            }
             last = block;
         }
         std::thread::sleep(SAMPLE_INTERVAL);
@@ -192,43 +200,47 @@ fn display_path(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn print_report(report: &Report, peaks: Option<&DisplayPeaks>) {
+fn print_report(report: &Report, display: &DisplayOptions) {
     let color = std::io::stdout().is_terminal();
-    println!("{}", format_report(report, peaks, color));
+    let table = DebtTable::new();
+    println!(
+        "{}",
+        format_report(report, color, display.verbose, &table)
+    );
 }
 
-fn format_report(report: &Report, peaks: Option<&DisplayPeaks>, color: bool) -> String {
+fn format_report(
+    report: &Report,
+    color: bool,
+    verbose: bool,
+    table: &DebtTable,
+) -> String {
     let features = &report.features;
-    let session = peaks.map(|peak| peak.session).unwrap_or(report.session_debt);
-    let artifact = peaks.map(|peak| peak.artifact).unwrap_or(report.artifact_debt);
-    let debt = (session + artifact).clamp(0.0, DEBT_CEILING);
-    let context_kib = transcript_chars(features) as f64 / 1024.0;
-    let segments = features.user_turns + features.assistant_turns;
-    let debt_field = if debt < 10.0 {
-        format!("{debt:.2}")
-    } else {
-        format!("{debt:.1}")
-    };
-    let debt_grade = beanz::grade(debt);
-    format!(
-        "{}\n{}\ndebt={debt_field} [{}] | truncation={:.1}% [{}] depth=[{}] | context={:.1}KiB turns={}/{} autonomy={}/{} bytes={} files={} complexity={} probes={} reads={} shells={} edits={}B",
-        format_debt_line("session", session, color),
-        format_debt_line("artifact", artifact, color),
-        debt_grade.label(),
-        report.truncation.fill_ratio * 100.0,
-        report.truncation.grade.label(),
-        report.session_depth.grade.label(),
-        context_kib,
-        features.user_turns,
-        segments,
-        features.autonomy_streak,
-        features.max_autonomy_run,
-        features.bytes_delta,
-        features.files_delta,
-        features.complexity_introduced,
-        features.probe_hits,
-        features.read_ops,
-        features.shell_ops,
-        features.edit_bytes,
-    )
+    let mut lines = vec![table.format(
+        report.session_debt,
+        report.artifact_debt,
+        features,
+        color,
+    )];
+    if verbose {
+        use beanz::transcript_chars;
+        let transcript_kib = transcript_chars(features) as f64 / 1024.0;
+        let log_lines = features.user_turns + features.assistant_turns;
+        lines.push(format!(
+            "transcript={transcript_kib:.1}KiB prompts={} log_lines={} autonomy={}/{} bytes={} cyclomatic={} structural={} spec_gap={:.1} probes={} reads={} shells={} edits={}B",
+            features.user_turns,
+            log_lines,
+            features.autonomy_streak,
+            features.max_autonomy_run,
+            features.bytes_delta,
+            features.cyclomatic_introduced,
+            features.files_delta,
+            features.spec_gap,
+            features.probe_hits,
+            features.read_ops,
+            features.shell_ops,
+            features.edit_bytes,
+        ));
+    }
+    lines.join("\n")
 }

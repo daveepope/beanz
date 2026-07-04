@@ -10,9 +10,9 @@ use crate::scoring::{DebtSample, Report};
 
 pub trait Harness {
     fn start(&mut self) -> notify::Result<()>;
-    fn start_for_score(&mut self) -> notify::Result<()>;
     fn stop(&mut self);
     fn features(&self) -> Features;
+    fn poll(&self) -> Report;
     fn calculate(&self) -> Report;
     fn complexity_deltas(&self) -> Vec<ComplexityDelta>;
     fn debt_series(&self) -> Vec<DebtSample>;

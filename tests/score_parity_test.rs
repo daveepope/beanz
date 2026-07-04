@@ -9,28 +9,29 @@ use std::time::{Duration, SystemTime};
 
 use beanz::cursor::edit_ops_from_line;
 use beanz::EditOp;
-use beanz::score_snapshot::reconstruct_baseline;
+use beanz::score_snapshot::{reconstruct_baseline, touched_from_edit_ops};
 use beanz::AgentHarness;
 use harness_factory::HarnessFactory;
 
 struct CliMetrics {
-    debt: f64,
+    code_debt: f64,
+    artifact_debt: f64,
     bytes_delta: i64,
-    files_delta: i64,
-    complexity_introduced: i64,
+    cyclomatic_introduced: i64,
+    structural_delta: i64,
 }
 
 fn beanz_exe() -> OsString {
     std::env::var_os("CARGO_BIN_EXE_beanz").unwrap_or_else(|| OsString::from("beanz"))
 }
 
-fn run_score(session: &Path, workspace: &Path) -> CliMetrics {
-    let output = Command::new(beanz_exe())
-        .arg("score")
-        .arg(session)
-        .env("BEANZ_WORKSPACE", workspace)
-        .output()
-        .expect("beanz score");
+fn run_score(session: &Path, workspace: &Path, verbose: bool) -> CliMetrics {
+    let mut command = Command::new(beanz_exe());
+    command.arg("score").arg(session).env("BEANZ_WORKSPACE", workspace);
+    if verbose {
+        command.arg("--verbose");
+    }
+    let output = command.output().expect("beanz score");
     assert!(
         output.status.success(),
         "stderr={}",
@@ -40,24 +41,45 @@ fn run_score(session: &Path, workspace: &Path) -> CliMetrics {
 }
 
 fn parse_score_stdout(stdout: &str) -> CliMetrics {
-    let debt = field(stdout, "debt=").parse().expect("debt");
-    let bytes_delta = field(stdout, "bytes=").parse().expect("bytes");
-    let files_delta = field(stdout, "files=").parse().expect("files");
-    let complexity_introduced = field(stdout, "complexity=").parse().expect("complexity");
+    let code: f64 = meter_field(stdout, "code cognitive debt");
+    let artifact: f64 = meter_field(stdout, "artifact cognitive debt");
+    let bytes_delta = verbose_field(stdout, "bytes=");
+    let cyclomatic_introduced = verbose_field(stdout, "cyclomatic=");
+    let structural_delta = verbose_field(stdout, "structural=");
     CliMetrics {
-        debt,
+        code_debt: code,
+        artifact_debt: artifact,
         bytes_delta,
-        files_delta,
-        complexity_introduced,
+        cyclomatic_introduced,
+        structural_delta,
     }
 }
 
-fn field<'a>(stdout: &'a str, prefix: &str) -> &'a str {
+fn meter_field(stdout: &str, label: &str) -> f64 {
+    stdout
+        .lines()
+        .find_map(|line| {
+            let cells: Vec<_> = line
+                .split('│')
+                .map(str::trim)
+                .filter(|cell| !cell.is_empty())
+                .collect();
+            if cells.first()? != &label {
+                return None;
+            }
+            cells.get(2)?.split_whitespace().next()?.parse().ok()
+        })
+        .unwrap_or_else(|| panic!("missing {label} row in {stdout}"))
+}
+
+fn verbose_field(stdout: &str, prefix: &str) -> i64 {
     stdout
         .split(prefix)
         .nth(1)
         .and_then(|rest| rest.split_whitespace().next())
-        .unwrap_or_else(|| panic!("missing {prefix} in {stdout}"))
+        .unwrap_or("0")
+        .parse()
+        .expect(prefix)
 }
 
 fn workspace_with_src(tag: &str) -> PathBuf {
@@ -107,24 +129,88 @@ fn score_matches_watch_final_sample() {
     );
 
     wait_for_disk();
-    let watch_report = watch.calculate();
+    let watch_report = watch.poll();
     watch.stop();
 
-    let score_report = run_score(&session_path, &workspace);
+    let score_report = run_score(&session_path, &workspace, true);
 
     fs::remove_file(&session_path).ok();
     fs::remove_dir_all(&workspace).ok();
 
     assert_eq!(
-        format!("{:.1}", watch_report.debt),
-        format!("{:.1}", score_report.debt)
+        format!("{:.1}", watch_report.session_debt),
+        format!("{:.1}", score_report.code_debt)
+    );
+    assert_eq!(
+        format!("{:.1}", watch_report.artifact_debt),
+        format!("{:.1}", score_report.artifact_debt)
     );
     assert_eq!(watch_report.features.bytes_delta, score_report.bytes_delta);
-    assert_eq!(watch_report.features.files_delta, score_report.files_delta);
     assert_eq!(
-        watch_report.features.complexity_introduced,
-        score_report.complexity_introduced
+        watch_report.features.cyclomatic_introduced,
+        score_report.cyclomatic_introduced
     );
+    assert_eq!(
+        watch_report.features.files_delta,
+        score_report.structural_delta
+    );
+}
+
+#[test]
+fn read_only_session_zero_disk_metrics() {
+    let workspace = workspace_with_src("readonly");
+    let src = workspace.join("src");
+    fs::write(
+        src.join("Stale.java"),
+        "class Stale { void a(int x) { if (x > 0) {} if (x < 0) {} } }",
+    )
+    .unwrap();
+
+    let factory = HarnessFactory::cursor();
+    let session_path = factory
+        .session()
+        .user("why this approach")
+        .user("explain more")
+        .to_file();
+
+    let mut harness = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone());
+    harness.start().unwrap();
+    let report = harness.calculate();
+    harness.stop();
+
+    fs::remove_file(&session_path).ok();
+    fs::remove_dir_all(&workspace).ok();
+
+    assert_eq!(report.features.bytes_delta, 0);
+    assert_eq!(report.features.files_delta, 0);
+    assert_eq!(report.features.cyclomatic_introduced, 0);
+    assert!(report.features.user_turns >= 2);
+}
+
+#[test]
+fn silent_disk_edit_raises_metrics() {
+    let workspace = workspace_with_src("silent");
+    let src = workspace.join("src");
+    let path = HarnessFactory::cursor().session().to_file();
+
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone());
+    harness.start().unwrap();
+
+    fs::write(
+        src.join("Quiet.java"),
+        "class Quiet { void a(int x) { if (x > 0) {} } }",
+    )
+    .unwrap();
+    wait_for_disk();
+
+    let report = harness.calculate();
+    harness.stop();
+    fs::remove_file(&path).ok();
+    fs::remove_dir_all(&workspace).ok();
+
+    assert!(report.features.bytes_delta > 0);
+    assert_eq!(report.features.files_delta, 1);
+    assert!(report.features.cyclomatic_introduced > 0);
 }
 
 #[test]
@@ -139,22 +225,24 @@ fn reverse_replay_strreplace_restores_baseline() {
         "    pass",
         "    if x > 0:\n        pass",
     );
-    let session_path = session.to_file();
-    let session_start = fs::metadata(&session_path)
-        .ok()
-        .and_then(|metadata| metadata.created().ok())
-        .unwrap_or(SystemTime::UNIX_EPOCH);
     let edit_ops = session
         .lines()
         .into_iter()
         .flat_map(|line| edit_ops_from_line(&line))
         .collect::<Vec<_>>();
+    let touched = touched_from_edit_ops(&workspace, &edit_ops);
+    let session_open = beanz::complexity::baseline_complexity(&workspace);
+    let session_open_bytes = beanz::complexity::baseline_bytes(&workspace);
 
     fs::write(&source, "def run():\n    if x > 0:\n        pass\n").unwrap();
 
-    let maps = reconstruct_baseline(&workspace, session_start, &edit_ops);
-
-    fs::remove_file(&session_path).ok();
+    let maps = reconstruct_baseline(
+        &workspace,
+        &edit_ops,
+        &touched,
+        &session_open,
+        &session_open_bytes,
+    );
     fs::remove_dir_all(&workspace).ok();
 
     let baseline = maps.baseline.get(&source).copied().unwrap_or(0);

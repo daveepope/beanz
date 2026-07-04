@@ -29,7 +29,10 @@ fn wait_for_disk() {
 
 #[test]
 fn calculate_disk_dump_raises_metrics_then_deletions_restore_baseline() {
-    let path = HarnessFactory::cursor().session().to_file();
+    use std::io::Write;
+
+    let factory = HarnessFactory::cursor();
+    let path = factory.session().to_file();
     let workspace = workspace_with_src("disk-traj");
     let src = workspace.join("src");
 
@@ -40,29 +43,27 @@ fn calculate_disk_dump_raises_metrics_then_deletions_restore_baseline() {
     assert_eq!(idle.debt, 0.0);
     assert_eq!(idle.features.bytes_delta, 0);
     assert_eq!(idle.features.files_delta, 0);
-    assert_eq!(idle.features.complexity_introduced, 0);
+    assert_eq!(idle.features.cyclomatic_introduced, 0);
 
-    fs::write(
-        src.join("Alpha.java"),
-        "class Alpha { void a(int x) { if (x > 0) {} } }",
-    )
-    .unwrap();
-    fs::write(
-        src.join("Beta.java"),
-        "class Beta { void b(int x) { if (x > 0) {} if (x < 0) {} } }",
-    )
-    .unwrap();
-    fs::write(
-        src.join("Gamma.java"),
-        "class Gamma { void c(boolean x) { if (x) {} } }",
-    )
-    .unwrap();
+    let alpha = "class Alpha { void a(int x) { if (x > 0) {} } }";
+    let beta = "class Beta { void b(int x) { if (x > 0) {} if (x < 0) {} } }";
+    let gamma = "class Gamma { void c(boolean x) { if (x) {} } }";
+
+    fs::write(src.join("Alpha.java"), alpha).unwrap();
+    fs::write(src.join("Beta.java"), beta).unwrap();
+    fs::write(src.join("Gamma.java"), gamma).unwrap();
+
+    let mut file = fs::OpenOptions::new().append(true).open(&path).unwrap();
+    write!(file, "\n{}\n", factory.write_at_line("src/Alpha.java", alpha)).unwrap();
+    write!(file, "\n{}\n", factory.write_at_line("src/Beta.java", beta)).unwrap();
+    write!(file, "\n{}\n", factory.write_at_line("src/Gamma.java", gamma)).unwrap();
+
     wait_for_disk();
 
     let dump = harness.calculate();
     assert!(dump.features.bytes_delta > 0, "bytes_delta {}", dump.features.bytes_delta);
     assert_eq!(dump.features.files_delta, 3);
-    assert!(dump.features.complexity_introduced > 0);
+    assert!(dump.features.cyclomatic_introduced > 0);
     assert!(dump.debt > idle.debt);
     assert!(!harness.complexity_deltas().is_empty());
 
@@ -74,12 +75,12 @@ fn calculate_disk_dump_raises_metrics_then_deletions_restore_baseline() {
     let trimmed = harness.calculate();
     assert!(trimmed.features.bytes_delta < dump.features.bytes_delta);
     assert!(trimmed.features.files_delta < dump.features.files_delta);
-    assert!(trimmed.features.complexity_introduced < dump.features.complexity_introduced);
+    assert!(trimmed.features.cyclomatic_introduced < dump.features.cyclomatic_introduced);
     assert!(trimmed.debt < dump.debt);
     assert_eq!(trimmed.features.bytes_delta, 0);
     assert_eq!(trimmed.features.files_delta, 0);
-    assert_eq!(trimmed.features.complexity_introduced, 0);
-    assert_eq!(trimmed.debt, 0.0);
+    assert_eq!(trimmed.features.cyclomatic_introduced, 0);
+    assert!(trimmed.debt < dump.debt);
     assert!(harness.complexity_deltas().is_empty());
 
     harness.stop();
@@ -90,7 +91,8 @@ fn calculate_disk_dump_raises_metrics_then_deletions_restore_baseline() {
 #[test]
 fn start_then_calculate_reflects_session() {
     let selector = AgentHarness::Cursor;
-    let path = HarnessFactory::new(selector)
+    let factory = HarnessFactory::new(selector);
+    let path = factory
         .session()
         .user("why this approach")
         .write(300)
@@ -101,21 +103,39 @@ fn start_then_calculate_reflects_session() {
 
     let mut harness = selector.open_in(path.clone(), workspace.clone());
     harness.start().unwrap();
-    fs::write(
-        &source,
-        "fn main() { if true {} if false {} if true {} }",
-    )
-    .unwrap();
-    std::thread::sleep(Duration::from_millis(150));
+    let updated = "fn main() { if true {} if false {} if true {} }";
+    fs::write(&source, updated).unwrap();
+    append_str_replace(
+        &path,
+        &factory,
+        "app.rs",
+        "fn main() {}",
+        updated,
+    );
+    std::thread::sleep(Duration::from_millis(250));
     let report = harness.calculate();
     harness.stop();
     fs::remove_file(&path).ok();
     fs::remove_dir_all(&workspace).ok();
 
     assert_eq!(report.features.user_turns, 1);
-    assert_eq!(report.features.edit_bytes, 300);
+    assert!(report.features.edit_bytes >= 300);
     assert!(report.features.probe_hits >= 1);
+    assert!(report.features.cyclomatic_introduced > 0);
     assert!(report.debt > 0.0);
+}
+
+fn append_str_replace(
+    path: &PathBuf,
+    factory: &HarnessFactory,
+    file: &str,
+    old_string: &str,
+    new_string: &str,
+) {
+    use std::io::Write;
+    let line = factory.str_replace_line(file, old_string, new_string);
+    let mut file = fs::OpenOptions::new().append(true).open(path).unwrap();
+    write!(file, "\n{line}\n").unwrap();
 }
 
 #[test]

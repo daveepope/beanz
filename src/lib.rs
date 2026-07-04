@@ -13,10 +13,13 @@ pub mod workspace;
 pub use complexity::{
     baseline_bytes, bytes_delta, file_bytes, files_delta, ComplexityDelta, ComplexityEngine,
 };
-pub use display::{debt_bar, format_debt_line};
+pub use display::{debt_bar, debt_meter, format_debt_table, refresh_block, DebtTable};
 pub use edits::EditOp;
 pub use features::{extract, transcript_chars, Features};
 pub use harness::{AgentHarness, Harness, UnsupportedHarness};
-pub use scoring::{grade, report, score, session_debt, session_depth, truncation, artifact_debt, DebtSample, Grade, Report, SessionDepth, Truncation};
+pub use scoring::{
+    artifact_debt, grade, meter_pct, middle_burial, report, score, session_debt, truncation,
+    DebtSample, Grade, MiddleBurial, Report, Truncation,
+};
 pub use session::SessionEngine;
 pub use transcript::{count_probes, Event, Role};

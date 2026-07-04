@@ -1,15 +1,23 @@
 use crate::features::{transcript_chars, Features};
 
-const BYTES_WEIGHT: f64 = 1.0 / 512.0;
-const FILES_WEIGHT: f64 = 3.0;
-const COMPLEXITY_WEIGHT: f64 = 1.0;
+const BYTES_WEIGHT: f64 = 1.0 / 256.0;
+const STRUCTURAL_WEIGHT: f64 = 3.0;
+const CYCLOMATIC_WEIGHT: f64 = 1.0;
 const PROBE_WEIGHT: f64 = 3.0;
 const DEBT_CEILING: f64 = 100.0;
+const GRADE_LOW: f64 = 25.0;
+const GRADE_MODERATE: f64 = 50.0;
+const GRADE_HIGH: f64 = 75.0;
+const GRADE_BAND: f64 = 25.0;
 const CONTEXT_BUDGET_CHARS: f64 = 400_000.0;
 const TRUNCATION_WEIGHT: f64 = 8.0;
-const DEPTH_WEIGHT: f64 = 0.4;
+const MIDDLE_WEIGHT: f64 = 0.4;
 const DEPTH_SCALE: f64 = 0.15;
 const SPREAD_SCALE: f64 = 1024.0;
+const TURN_WEIGHT: f64 = 0.25;
+const TURN_BUMP_CAP: f64 = 5.0;
+const SPEC_GAP_WEIGHT: f64 = 0.08;
+const SPEC_GAP_CAP: f64 = 12.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Grade {
@@ -38,7 +46,7 @@ pub struct Truncation {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct SessionDepth {
+pub struct MiddleBurial {
     pub risk: f64,
     pub grade: Grade,
 }
@@ -47,7 +55,7 @@ pub struct SessionDepth {
 pub struct Report {
     pub features: Features,
     pub truncation: Truncation,
-    pub session_depth: SessionDepth,
+    pub middle: MiddleBurial,
     pub session_debt: f64,
     pub artifact_debt: f64,
     pub debt: f64,
@@ -67,15 +75,26 @@ pub fn score(features: &Features) -> f64 {
 }
 
 pub fn grade(debt: f64) -> Grade {
-    if debt < 10.0 {
+    if debt < GRADE_LOW {
         Grade::Low
-    } else if debt < 30.0 {
+    } else if debt < GRADE_MODERATE {
         Grade::Moderate
-    } else if debt < 60.0 {
+    } else if debt < GRADE_HIGH {
         Grade::High
     } else {
         Grade::Severe
     }
+}
+
+pub fn meter_pct(debt: f64) -> f64 {
+    let debt = debt.clamp(0.0, DEBT_CEILING);
+    let pct = match grade(debt) {
+        Grade::Low => debt / GRADE_LOW * 100.0,
+        Grade::Moderate => (debt - GRADE_LOW) / GRADE_BAND * 100.0,
+        Grade::High => (debt - GRADE_MODERATE) / GRADE_BAND * 100.0,
+        Grade::Severe => (debt - GRADE_HIGH) / (DEBT_CEILING - GRADE_HIGH) * 100.0,
+    };
+    pct.clamp(0.0, 100.0)
 }
 
 pub fn truncation(features: &Features) -> Truncation {
@@ -88,39 +107,61 @@ pub fn truncation(features: &Features) -> Truncation {
     }
 }
 
-pub fn session_depth(features: &Features) -> SessionDepth {
-    let chars = transcript_chars(features) as f64;
+pub fn middle_burial(features: &Features) -> MiddleBurial {
+    let segments = (features.user_turns + features.assistant_turns).max(1) as f64;
+    let spread = transcript_chars(features) as f64 / segments;
     let depth = features.max_autonomy_run as f64;
-    let risk = DEPTH_WEIGHT * (chars / SPREAD_SCALE) * (1.0 + depth * DEPTH_SCALE);
-    SessionDepth {
+    let risk =
+        MIDDLE_WEIGHT * segments.sqrt() * (spread / SPREAD_SCALE) * (1.0 + depth * DEPTH_SCALE);
+    MiddleBurial {
         risk,
         grade: pressure_grade(risk),
     }
 }
 
-pub fn session_debt(features: &Features) -> f64 {
+fn round_debt(value: f64) -> f64 {
+    value.clamp(0.0, DEBT_CEILING).round()
+}
+
+fn spec_gap_bump(features: &Features) -> f64 {
+    (SPEC_GAP_WEIGHT * features.spec_gap).min(SPEC_GAP_CAP)
+}
+
+fn line_bump(features: &Features) -> f64 {
+    let lines = features.user_turns + features.assistant_turns;
+    (lines as f64 * TURN_WEIGHT).min(TURN_BUMP_CAP)
+}
+
+fn shared_pressure(features: &Features) -> f64 {
     let truncation = truncation(features);
-    let depth = session_depth(features);
-    truncation.risk + depth.risk
+    let middle = middle_burial(features);
+    truncation.risk + middle.risk + line_bump(features) + spec_gap_bump(features)
+}
+
+pub fn session_debt(features: &Features) -> f64 {
+    let cyclomatic =
+        CYCLOMATIC_WEIGHT * features.cyclomatic_introduced.max(0) as f64;
+    let structural = STRUCTURAL_WEIGHT * features.files_delta.max(0) as f64;
+    round_debt(shared_pressure(features) + cyclomatic + structural)
 }
 
 pub fn artifact_debt(features: &Features) -> f64 {
-    let gross = volume(features).max(0.0) * (1.0 + features.max_autonomy_run as f64);
+    let gross = shared_pressure(features) + volume(features).max(0.0);
     let discount = PROBE_WEIGHT * features.probe_hits as f64;
-    (gross - discount).max(0.0)
+    round_debt((gross - discount).max(0.0))
 }
 
 pub fn report(features: Features) -> Report {
     let truncation = truncation(&features);
-    let session_depth = session_depth(&features);
-    let session = truncation.risk + session_depth.risk;
+    let middle = middle_burial(&features);
+    let session = session_debt(&features);
     let artifact = artifact_debt(&features);
     let debt = (session + artifact).clamp(0.0, DEBT_CEILING);
     let grade = grade(debt);
     Report {
         features,
         truncation,
-        session_depth,
+        middle,
         session_debt: session,
         artifact_debt: artifact,
         debt,
@@ -154,6 +195,4 @@ fn pressure_grade(risk: f64) -> Grade {
 
 fn volume(features: &Features) -> f64 {
     BYTES_WEIGHT * features.bytes_delta as f64
-        + FILES_WEIGHT * features.files_delta as f64
-        + COMPLEXITY_WEIGHT * features.complexity_introduced as f64
 }

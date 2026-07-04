@@ -1,20 +1,36 @@
 use std::path::{Path, PathBuf};
 
+pub fn resolve_workspace(
+    beanz_workspace: Option<&Path>,
+    build_workspace: Option<&Path>,
+    cwd: &Path,
+) -> PathBuf {
+    if let Some(path) = beanz_workspace {
+        if path.is_dir() {
+            return canonicalize_lossy(path.to_path_buf());
+        }
+    }
+    if let Some(path) = build_workspace {
+        if path.is_dir() {
+            return canonicalize_lossy(path.to_path_buf());
+        }
+    }
+    git_root(cwd).unwrap_or_else(|| cwd.to_path_buf())
+}
+
 pub fn workspace_root() -> Option<PathBuf> {
-    if let Ok(value) = std::env::var("BEANZ_WORKSPACE") {
-        let path = PathBuf::from(value);
-        if path.is_dir() {
-            return Some(canonicalize_lossy(path));
-        }
-    }
-    if let Ok(value) = std::env::var("BUILD_WORKSPACE_DIRECTORY") {
-        let path = PathBuf::from(value);
-        if path.is_dir() {
-            return Some(canonicalize_lossy(path));
-        }
-    }
     let cwd = std::env::current_dir().ok()?;
-    git_root(&cwd).or(Some(cwd))
+    Some(resolve_workspace(
+        std::env::var("BEANZ_WORKSPACE")
+            .ok()
+            .map(PathBuf::from)
+            .as_deref(),
+        std::env::var("BUILD_WORKSPACE_DIRECTORY")
+            .ok()
+            .map(PathBuf::from)
+            .as_deref(),
+        &cwd,
+    ))
 }
 
 pub fn git_root(start: &Path) -> Option<PathBuf> {

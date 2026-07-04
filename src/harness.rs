@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::fmt;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::complexity::ComplexityDelta;
 use crate::cursor::CursorHarness;
@@ -67,6 +67,18 @@ impl AgentHarness {
     ) -> Box<dyn Harness> {
         match self {
             AgentHarness::Cursor => Box::new(CursorHarness::new(path, workspace_root, preset)),
+        }
+    }
+
+    pub fn latest_session_at(self, home: &Path, workspace: &Path) -> io::Result<PathBuf> {
+        match self {
+            AgentHarness::Cursor => crate::cursor::latest_session_at(home, workspace),
+        }
+    }
+
+    pub fn wait_for_new_session_at(self, home: &Path, workspace: &Path) -> io::Result<PathBuf> {
+        match self {
+            AgentHarness::Cursor => crate::cursor::wait_for_new_session_at(home, workspace),
         }
     }
 

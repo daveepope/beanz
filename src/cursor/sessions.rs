@@ -9,10 +9,25 @@ use notify::{RecursiveMode, Watcher};
 
 const POLL_INTERVAL: Duration = Duration::from_millis(300);
 
+fn session_env() -> Result<(PathBuf, PathBuf), io::Error> {
+    let home = std::env::var_os("HOME").ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "could not resolve Cursor session directory for this workspace",
+        )
+    })?;
+    let workspace = crate::workspace::workspace_root().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::NotFound,
+            "could not resolve Cursor session directory for this workspace",
+        )
+    })?;
+    Ok((PathBuf::from(home), workspace))
+}
+
 pub fn transcripts_root() -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    let workspace = crate::workspace::workspace_root()?;
-    Some(session_root(Path::new(&home), &workspace))
+    let (home, workspace) = session_env().ok()?;
+    Some(session_root(&home, &workspace))
 }
 
 pub fn session_root(home: &Path, workspace: &Path) -> PathBuf {
@@ -63,14 +78,17 @@ pub fn newest_session(mut dated: Vec<(SystemTime, PathBuf)>) -> Option<PathBuf> 
     dated.pop().map(|(_, path)| path)
 }
 
+pub fn latest_session_at(home: &Path, workspace: &Path) -> io::Result<PathBuf> {
+    latest_session_in(&session_root(home, workspace))
+}
+
+pub fn wait_for_new_session_at(home: &Path, workspace: &Path) -> io::Result<PathBuf> {
+    wait_for_new_session_in(&session_root(home, workspace))
+}
+
 pub fn latest_session() -> io::Result<PathBuf> {
-    let root = transcripts_root().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "could not resolve Cursor session directory for this workspace",
-        )
-    })?;
-    latest_session_in(&root)
+    let (home, workspace) = session_env()?;
+    latest_session_at(&home, &workspace)
 }
 
 pub fn latest_session_in(root: &Path) -> io::Result<PathBuf> {
@@ -91,13 +109,8 @@ pub fn latest_session_in(root: &Path) -> io::Result<PathBuf> {
 }
 
 pub fn wait_for_new_session() -> io::Result<PathBuf> {
-    let root = transcripts_root().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::NotFound,
-            "could not resolve Cursor session directory for this workspace",
-        )
-    })?;
-    wait_for_new_session_in(&root)
+    let (home, workspace) = session_env()?;
+    wait_for_new_session_at(&home, &workspace)
 }
 
 pub fn wait_for_new_session_in(root: &Path) -> io::Result<PathBuf> {
@@ -138,4 +151,33 @@ pub fn wait_for_new_session_in(root: &Path) -> io::Result<PathBuf> {
 
 fn to_io(error: notify::Error) -> io::Error {
     io::Error::new(io::ErrorKind::Other, error)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn session_env_reads_process_home_and_workspace() {
+        if std::env::var_os("HOME").is_none() {
+            return;
+        }
+        assert!(session_env().is_ok());
+    }
+
+    #[test]
+    fn transcripts_root_reads_process_env() {
+        if std::env::var_os("HOME").is_none() {
+            return;
+        }
+        let _ = transcripts_root();
+    }
+
+    #[test]
+    fn latest_session_runs_env_wrapper() {
+        if std::env::var_os("HOME").is_none() {
+            return;
+        }
+        let _ = latest_session();
+    }
 }

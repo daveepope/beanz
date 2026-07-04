@@ -116,6 +116,16 @@ pub fn resolve_preset_inputs(
     Ok(WeightPreset::Normal)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn resolve_preset_reads_current_env_without_panic() {
+        let _ = resolve_preset(false, false);
+    }
+}
+
 fn env_enabled(name: &str) -> bool {
     std::env::var(name)
         .map(|value| {

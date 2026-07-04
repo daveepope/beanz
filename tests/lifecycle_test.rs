@@ -3,12 +3,12 @@ mod harness_factory;
 use std::ffi::OsString;
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, ExitCode};
+use std::process::Command;
 use std::time::Duration;
 
-use beanz::run;
 use beanz::{AgentHarness, WeightPreset};
 use harness_factory::HarnessFactory;
+use beanz::cursor::session_root;
 
 fn empty_workspace(tag: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
@@ -32,16 +32,6 @@ fn wait_for_disk() {
 
 fn beanz_exe() -> OsString {
     std::env::var_os("CARGO_BIN_EXE_beanz").unwrap_or_else(|| OsString::from("beanz"))
-}
-
-fn with_workspace_env(workspace: &PathBuf, body: impl FnOnce()) {
-    let prior = std::env::var("BEANZ_WORKSPACE").ok();
-    std::env::set_var("BEANZ_WORKSPACE", workspace);
-    body();
-    match prior {
-        Some(value) => std::env::set_var("BEANZ_WORKSPACE", value),
-        None => std::env::remove_var("BEANZ_WORKSPACE"),
-    }
 }
 
 #[test]
@@ -230,55 +220,92 @@ fn run_score_watch_lenient_strict_print_mode_lines() {
         .write(200)
         .to_file();
 
-    with_workspace_env(&workspace, || {
-        let lenient = Command::new(beanz_exe())
-            .args([
-                "score",
-                session.to_str().unwrap(),
-                "--verbose",
-                "--lenient",
-            ])
-            .env("BEANZ_WORKSPACE", &workspace)
-            .output()
-            .expect("beanz score --lenient");
-        assert!(
-            lenient.status.success(),
-            "stderr={}",
-            String::from_utf8_lossy(&lenient.stderr)
-        );
-        let lenient_out = String::from_utf8_lossy(&lenient.stdout);
-        assert!(lenient_out.contains("mode: lenient"));
-        assert!(lenient_out.contains("preset=lenient"));
+    let workspace_s = workspace.to_str().unwrap();
+    let session_s = session.to_str().unwrap();
 
-        let strict = Command::new(beanz_exe())
-            .args([
-                "score",
-                session.to_str().unwrap(),
-                "--verbose",
-                "--strict",
-            ])
-            .env("BEANZ_WORKSPACE", &workspace)
-            .output()
-            .expect("beanz score --strict");
-        assert!(
-            strict.status.success(),
-            "stderr={}",
-            String::from_utf8_lossy(&strict.stderr)
-        );
-        let strict_out = String::from_utf8_lossy(&strict.stdout);
-        assert!(strict_out.contains("mode: strict"));
-        assert!(strict_out.contains("preset=strict"));
+    let lenient = Command::new(beanz_exe())
+        .args([
+            "score",
+            session_s,
+            "--verbose",
+            "--lenient",
+            "--workspace",
+            workspace_s,
+        ])
+        .output()
+        .expect("beanz score --lenient");
+    assert!(
+        lenient.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&lenient.stderr)
+    );
+    let lenient_out = String::from_utf8_lossy(&lenient.stdout);
+    assert!(lenient_out.contains("mode: lenient"));
+    assert!(lenient_out.contains("preset=lenient"));
 
-        std::env::set_var("BEANZ_WATCH_TICKS", "1");
-        let watch = run(vec![
-            "watch".to_string(),
-            session.to_string_lossy().to_string(),
-            "--strict".to_string(),
-        ]);
-        std::env::remove_var("BEANZ_WATCH_TICKS");
-        assert_eq!(watch, ExitCode::SUCCESS);
-    });
+    let strict = Command::new(beanz_exe())
+        .args([
+            "score",
+            session_s,
+            "--verbose",
+            "--strict",
+            "--workspace",
+            workspace_s,
+        ])
+        .output()
+        .expect("beanz score --strict");
+    assert!(
+        strict.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&strict.stderr)
+    );
+    let strict_out = String::from_utf8_lossy(&strict.stdout);
+    assert!(strict_out.contains("mode: strict"));
+    assert!(strict_out.contains("preset=strict"));
+
+    let watch = Command::new(beanz_exe())
+        .args([
+            "watch",
+            session_s,
+            "--strict",
+            "--watch-ticks",
+            "1",
+            "--workspace",
+            workspace_s,
+        ])
+        .status()
+        .expect("beanz watch");
+    assert!(watch.success());
 
     fs::remove_file(&session).ok();
     fs::remove_dir_all(&workspace).ok();
+}
+
+#[test]
+fn run_score_without_path_finds_latest_session_via_home_workspace_flags() {
+    let home = empty_workspace("cli-home");
+    let workspace = home.join("project");
+    fs::create_dir_all(&workspace).unwrap();
+    let transcripts = session_root(&home, &workspace);
+    fs::create_dir_all(&transcripts.join("live")).unwrap();
+    let session = transcripts.join("live").join("live.jsonl");
+    fs::write(&session, "{}\n").unwrap();
+
+    let output = Command::new(beanz_exe())
+        .args([
+            "score",
+            "--home",
+            home.to_str().unwrap(),
+            "--workspace",
+            workspace.to_str().unwrap(),
+        ])
+        .output()
+        .expect("beanz score");
+    assert!(
+        output.status.success(),
+        "stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    fs::remove_dir_all(&home).ok();
 }

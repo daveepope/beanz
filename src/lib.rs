@@ -27,3 +27,4 @@ pub use cli::run;
 pub use strictness::{resolve_preset, resolve_preset_inputs, WeightPreset, WeightProfile};
 pub use session::SessionEngine;
 pub use transcript::{count_probes, Event, Role};
+pub use workspace::{git_root, resolve_workspace, workspace_root};

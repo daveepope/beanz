@@ -27,7 +27,11 @@ fn beanz_exe() -> OsString {
 
 fn run_score(session: &Path, workspace: &Path, verbose: bool) -> CliMetrics {
     let mut command = Command::new(beanz_exe());
-    command.arg("score").arg(session).env("BEANZ_WORKSPACE", workspace);
+    command
+        .arg("score")
+        .arg(session)
+        .arg("--workspace")
+        .arg(workspace);
     if verbose {
         command.arg("--verbose");
     }

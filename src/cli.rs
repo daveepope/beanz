@@ -3,12 +3,13 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use crate::cursor::{latest_session_in, session_root, wait_for_new_session_in};
 use crate::scoring::Report;
 use crate::{
     refresh_block, resolve_preset, AgentHarness, ComplexityDelta, DebtTable, Harness, WeightPreset,
 };
 
-const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--lenient] [--strict] [--verbose] [session.jsonl]\n  default command: watch\n  session path alone: watch that file (beanz path/to/session.jsonl)\n  env: BEANZ_LENIENT=1 or BEANZ_STRICT=1 when no --lenient/--strict\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
+const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--home <path>] [--workspace <path>] [--watch-ticks <n>] [--lenient] [--strict] [--verbose] [session.jsonl]\n  default command: watch\n  session path alone: watch that file (beanz path/to/session.jsonl)\n  env: BEANZ_LENIENT=1 or BEANZ_STRICT=1 when no --lenient/--strict\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct DisplayOptions {
@@ -19,6 +20,9 @@ pub(crate) struct ParsedArgs {
     pub command: String,
     pub harness: String,
     pub path: Option<String>,
+    pub workspace: Option<String>,
+    pub home: Option<String>,
+    pub watch_ticks: Option<usize>,
     pub verbose: bool,
     pub lenient: bool,
     pub strict: bool,
@@ -51,7 +55,9 @@ pub fn run(args: Vec<String>) -> ExitCode {
         }
     };
 
-    let path = match resolve_session(selector, &parsed) {
+    let home = home_for_run(&parsed);
+    let workspace = workspace_for_run(&parsed);
+    let path = match resolve_session(selector, &parsed, &workspace, &home) {
         Ok(path) => path,
         Err(code) => return code,
     };
@@ -60,7 +66,7 @@ pub fn run(args: Vec<String>) -> ExitCode {
         verbose: parsed.verbose,
     };
 
-    let mut harness = selector.open(path.clone(), preset);
+    let mut harness = selector.open_in(path.clone(), workspace, preset);
     let code = match parsed.command.as_str() {
         "score" => {
             if let Err(error) = harness.start() {
@@ -76,7 +82,12 @@ pub fn run(args: Vec<String>) -> ExitCode {
                 eprintln!("failed to start session: {error}");
                 return ExitCode::FAILURE;
             }
-            run_watch_ticks(harness.as_ref(), &display, preset, watch_tick_cap());
+            run_watch_ticks(
+                harness.as_ref(),
+                &display,
+                preset,
+                parsed.watch_ticks.or_else(watch_tick_cap),
+            );
             ExitCode::SUCCESS
         }
         other => {
@@ -95,6 +106,9 @@ pub(crate) fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
     let mut verbose = false;
     let mut lenient = false;
     let mut strict = false;
+    let mut workspace = None;
+    let mut home = None;
+    let mut watch_ticks = None;
     let mut positionals: Vec<String> = Vec::new();
     let mut index = 0;
 
@@ -106,6 +120,31 @@ pub(crate) fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
                     .get(index)
                     .ok_or_else(|| "missing value for --harness".to_string())?;
                 harness = value.clone();
+            }
+            "--workspace" | "-W" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "missing value for --workspace".to_string())?;
+                workspace = Some(value.clone());
+            }
+            "--home" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "missing value for --home".to_string())?;
+                home = Some(value.clone());
+            }
+            "--watch-ticks" => {
+                index += 1;
+                let value = args
+                    .get(index)
+                    .ok_or_else(|| "missing value for --watch-ticks".to_string())?;
+                watch_ticks = Some(
+                    value
+                        .parse()
+                        .map_err(|_| format!("invalid --watch-ticks value '{value}'"))?,
+                );
             }
             "--verbose" | "-v" => verbose = true,
             "--lenient" => lenient = true,
@@ -135,19 +174,51 @@ pub(crate) fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
         command,
         harness,
         path,
+        workspace,
+        home,
+        watch_ticks,
         verbose,
         lenient,
         strict,
     })
 }
 
-pub(crate) fn resolve_session(selector: AgentHarness, parsed: &ParsedArgs) -> Result<PathBuf, ExitCode> {
+fn home_for_run(parsed: &ParsedArgs) -> PathBuf {
+    parsed
+        .home
+        .as_ref()
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+        .unwrap_or_default()
+}
+
+fn workspace_for_run(parsed: &ParsedArgs) -> PathBuf {
+    parsed
+        .workspace
+        .as_ref()
+        .map(PathBuf::from)
+        .or_else(crate::workspace::workspace_root)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn transcripts_dir(home: &Path, workspace: &Path) -> PathBuf {
+    session_root(home, workspace)
+}
+
+pub(crate) fn resolve_session(
+    selector: AgentHarness,
+    parsed: &ParsedArgs,
+    workspace: &Path,
+    home: &Path,
+) -> Result<PathBuf, ExitCode> {
     if let Some(path) = &parsed.path {
         return Ok(PathBuf::from(path));
     }
 
+    let transcripts = transcripts_dir(home, workspace);
+
     if parsed.command == "score" {
-        return match selector.latest_session() {
+        return match latest_session_in(&transcripts) {
             Ok(path) => {
                 eprintln!("scoring last session: {}", path.display());
                 Ok(path)
@@ -163,7 +234,7 @@ pub(crate) fn resolve_session(selector: AgentHarness, parsed: &ParsedArgs) -> Re
         "waiting for new session to start [{}] (ctrl-c to cancel)…",
         selector.name()
     );
-    match selector.wait_for_new_session() {
+    match wait_for_new_session_in(&transcripts) {
         Ok(path) => {
             eprintln!("session started: {}", path.display());
             Ok(path)
@@ -296,6 +367,7 @@ mod tests {
 
     use super::*;
     use crate::complexity::ComplexityDelta;
+    use crate::cursor::session_root;
     use crate::{DebtTable, Features, WeightPreset};
 
     #[test]
@@ -409,16 +481,108 @@ mod tests {
     }
 
     #[test]
+    fn parse_args_workspace_and_watch_ticks_parses_flags() {
+        let parsed = parse_args(&[
+            "watch".to_string(),
+            "--workspace".to_string(),
+            "/tmp/ws".to_string(),
+            "--watch-ticks".to_string(),
+            "3".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(parsed.workspace.as_deref(), Some("/tmp/ws"));
+        assert_eq!(parsed.watch_ticks, Some(3));
+    }
+
+    #[test]
+    fn workspace_for_run_prefers_workspace_flag() {
+        let parsed = parse_args(&[
+            "score".to_string(),
+            "--workspace".to_string(),
+            "/tmp/ws".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(
+            workspace_for_run(&parsed),
+            PathBuf::from("/tmp/ws")
+        );
+    }
+
+    #[test]
+    fn resolve_session_score_empty_transcripts_returns_failure() {
+        let home = std::env::temp_dir().join(format!(
+            "beanz-cli-home-{}",
+            std::process::id()
+        ));
+        let workspace = home.join("project");
+        std::fs::create_dir_all(session_root(&home, &workspace)).unwrap();
+        let parsed = ParsedArgs {
+            command: "score".to_string(),
+            harness: "cursor".to_string(),
+            path: None,
+            workspace: None,
+            home: None,
+            watch_ticks: None,
+            verbose: false,
+            lenient: false,
+            strict: false,
+        };
+        assert_eq!(
+            resolve_session(AgentHarness::Cursor, &parsed, &workspace, &home),
+            Err(ExitCode::FAILURE)
+        );
+        std::fs::remove_dir_all(&home).ok();
+    }
+
+    #[test]
+    fn resolve_session_score_finds_latest_in_transcripts() {
+        let home = std::env::temp_dir().join(format!(
+            "beanz-cli-latest-{}",
+            std::process::id()
+        ));
+        let workspace = home.join("project");
+        let transcripts = session_root(&home, &workspace);
+        std::fs::create_dir_all(&transcripts.join("seed")).unwrap();
+        let session = transcripts.join("seed").join("seed.jsonl");
+        std::fs::write(&session, "{}").unwrap();
+        let parsed = ParsedArgs {
+            command: "score".to_string(),
+            harness: "cursor".to_string(),
+            path: None,
+            workspace: None,
+            home: None,
+            watch_ticks: None,
+            verbose: false,
+            lenient: false,
+            strict: false,
+        };
+        assert_eq!(
+            resolve_session(AgentHarness::Cursor, &parsed, &workspace, &home).unwrap(),
+            session
+        );
+        std::fs::remove_dir_all(&home).ok();
+    }
+
+    #[test]
     fn resolve_session_explicit_path_returns_path() {
         let parsed = ParsedArgs {
             command: "score".to_string(),
             harness: "cursor".to_string(),
             path: Some("/tmp/explicit.jsonl".to_string()),
+            workspace: None,
+            home: None,
+            watch_ticks: None,
             verbose: false,
             lenient: false,
             strict: false,
         };
-        let path = resolve_session(AgentHarness::Cursor, &parsed).unwrap();
+        let path = resolve_session(
+            AgentHarness::Cursor,
+            &parsed,
+            Path::new("."),
+            Path::new("/home"),
+        )
+        .unwrap();
         assert_eq!(path, PathBuf::from("/tmp/explicit.jsonl"));
     }
 

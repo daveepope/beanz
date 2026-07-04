@@ -266,3 +266,7 @@ See [`AI.md`](AI.md): no permission is granted to use this software or its sourc
 ## Authors
 
 - **David Pope** [daveepope](https://github.com/daveepope)
+
+<p align="center">
+  <img src="assets/favicon.png" alt="beanz" width="96">
+</p>

@@ -34,6 +34,6 @@ class Beanz < Formula
   end
 
   test do
-    assert_match "usage:", shell_output("#{bin}/beanz --foo 2>&1", 2)
+    assert_match "usage:", shell_output("#{bin}/beanz --help", 0)
   end
 end

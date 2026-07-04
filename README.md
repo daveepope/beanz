@@ -8,7 +8,16 @@
 
 beanz is a small companion for developers who want to keep an eye on cognitive debt while using AI coding agents. Think of it as a sausage dog cute, a bit annoying, and that's the point. It nudges you when you've vibed a little too hard, added too much collagen to the dish, and shipped something that works but that you (or the team) don't really understand. Working code isn't the same as understood code, and beanz watches your agent sessions and scores that gap so you know when to stop, commit, or break the work into something smaller.
 
-It's for developers who need to keep cognitive debt low on the code they're changing; managers who want juniors using AI productively without offloading every decision; students who want to stay productive with agents but still actually learn; and seasoned engineers who suspect they're driving the Ferrari before they've learned to handle a sedan. Teams can also wire it into CI on PRs if they want a gate you'll need the chat transcripts. For background on why this matters, see [Cognitive debt is the real tax](https://martintrojer.github.io/post/2026-04-12-cognitive-debt-is-the-real-tax/) and the [cognitive-debt-prevention-kit](https://github.com/kesslernity/cognitive-debt-prevention-kit).
+It's for developers who need to keep cognitive debt low on the code they're changing; managers who want juniors using AI productively without offloading every decision; students who want to stay productive with agents but still actually learn; and seasoned engineers who suspect they're driving the Ferrari before they've learned to handle a sedan. Teams can also wire it into CI on PRs if they want a gate — you'll need the chat transcripts.
+
+### Further reading
+
+- [Cognitive debt is the real tax](https://martintrojer.github.io/post/2026-04-12-cognitive-debt-is-the-real-tax/) — Martin Trojer
+- [Your Brain on ChatGPT: Accumulation of Cognitive Debt when Using an AI Assistant for Essay Writing Task](https://arxiv.org/pdf/2506.08872) — Kosmyna et al. (2025)
+- [Echoes of AI: Investigating the Downstream Effects of AI Assistants on Software Maintainability](https://arxiv.org/html/2507.00788v2) — (2025)
+- [Tool, tutor, or crutch?: A grounded theory of cognitive scaffolding and offloading in AI-assisted programming education](https://link.springer.com/article/10.1186/s40594-025-00592-w) — Springer *International Journal of STEM Education* (2026)
+- [Software evolution—processes of software change](https://www.sciencedirect.com/science/article/abs/pii/016412129190085K) — Lehman & Belady (1991)
+- [Speed at the Cost of Quality: How Cursor AI Increases Short-Term Velocity and Long-Term Complexity in Open-Source Projects](https://cmustrudel.github.io/papers/msr2026he.pdf) — He et al., Carnegie Mellon (2026)
 
 ## Code vs artifact cognitive debt
 
@@ -62,7 +71,34 @@ Watch a specific session file:
 
 ```bash
 beanz watch path/to/session.jsonl
+beanz path/to/session.jsonl
 ```
+
+### Command-line reference
+
+Run with `--help` or `-h`:
+
+```bash
+beanz --help
+```
+
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--help` | `-h` | Print usage and exit |
+| `watch` | | Live debt table for a session (default command) |
+| `score` | | One-shot score for a session |
+| `--harness <name>` | `-H` | Agent backend (default: `cursor`) |
+| `--workspace <path>` | `-W` | Workspace root for session discovery |
+| `--home <path>` | | Home directory for agent data (default: `$HOME`) |
+| `--watch-ticks <n>` | | Limit watch to `n` samples (for tests/automation) |
+| `--lenient` | | Lenient scoring preset |
+| `--strict` | | Strict scoring preset |
+| `--verbose` | `-v` | Extra output (e.g. preset line) |
+| `[session.jsonl]` | | Session file; with no command, implies `watch` |
+
+Environment variables (when `--lenient` / `--strict` not set): `BEANZ_LENIENT=1`, `BEANZ_STRICT=1`.
+
+**Defaults:** no args → `watch` the next session you start; `score` with no path → most recent session in Cursor transcripts.
 
 ### Example output
 

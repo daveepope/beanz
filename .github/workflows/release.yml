@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   build:
@@ -43,7 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.ref }}
       - uses: actions/download-artifact@v4
         with:
           pattern: beanz-*
@@ -70,10 +71,14 @@ jobs:
           sed -i "s/PLACEHOLDER_AARCH64_APPLE_DARWIN/${AARCH64}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_APPLE_DARWIN/${X86_64_MAC}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_UNKNOWN_LINUX_GNU/${LINUX}/" "$FORMULA"
-      - name: Commit formula
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Formula/beanz.rb
-          git diff --staged --quiet || git commit -m "Update Homebrew formula for ${GITHUB_REF_NAME}"
-          git push
+      - name: Open formula pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          base: main
+          branch: formula/${{ github.ref_name }}
+          delete-branch: true
+          title: Update Homebrew formula for ${{ github.ref_name }}
+          commit-message: Update Homebrew formula for ${{ github.ref_name }}
+          body: |
+            Automated checksum update for ${{ github.ref_name }}.
+            Merge after the GitHub Release assets are published.

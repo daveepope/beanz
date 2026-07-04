@@ -1,14 +1,20 @@
 # beanz
 
 <p align="center">
-  <img src="assets/beanz-mascot.png" alt="beanz — sausage dog sitting beside a developer at work" width="480">
+  <img src="assets/beanz-mascot.png" alt="beanz, sausage dog sitting beside a developer at work" width="480">
 </p>
 
 ## Overview
 
 beanz is a small companion for developers who want to keep an eye on cognitive debt while using AI coding agents. Think of it as a sausage dog cute, a bit annoying, and that's the point. It nudges you when you've vibed a little too hard, added too much collagen to the dish, and shipped something that works but that you (or the team) don't really understand. Working code isn't the same as understood code, and beanz watches your agent sessions and scores that gap so you know when to stop, commit, or break the work into something smaller.
 
-It's for developers who need to keep cognitive debt low on the code they're changing; managers who want juniors using AI productively without offloading every decision; students who want to stay productive with agents but still actually learn; and seasoned engineers who suspect they're driving the Ferrari before they've learned to handle a sedan. Teams can also wire it into CI on PRs if they want a gate you'll need the chat transcripts.
+### Use cases
+
+- **Junior engineers** keeping cognitive debt low on the code they're changing: a signal to pause, commit, or shrink the unit of work before you lose the plot, and to check you're not offloading decisions to the agent instead of still learning.
+- **Experienced engineers** who suspect they're vibing too hard and want a sanity check before they ship something they don't fully understand.
+- **Managers** who want their team using AI productively; beanz helps you see when someone's letting the agent run ahead.
+- **Students** learning to program with agents: stay productive, but get a nudge when you've handed over too much and need to stop, think, or break the task down so you're still actually learning.
+- **Teams in CI** scoring PRs from chat transcripts if you want a gate on cognitive debt before merge (you'll need the session logs).
 
 ### Further reading
 

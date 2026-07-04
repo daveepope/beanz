@@ -6,25 +6,28 @@ use std::time::SystemTime;
 
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
-use crate::cursor::transcript::{edit_ops_from_line, EditOp};
+use crate::edits::EditOp;
 use crate::features::{extract, Features};
 use crate::scoring::{report, Report};
 use crate::transcript::Event;
 
 pub type LineParser = fn(&str) -> Option<Event>;
+pub type EditLineParser = fn(&str) -> Vec<EditOp>;
 
 pub struct SessionEngine {
     path: PathBuf,
     parse: LineParser,
+    edit_parse: EditLineParser,
     state: Arc<Mutex<Vec<Event>>>,
     watcher: Option<RecommendedWatcher>,
 }
 
 impl SessionEngine {
-    pub fn new(path: PathBuf, parse: LineParser) -> Self {
+    pub fn new(path: PathBuf, parse: LineParser, edit_parse: EditLineParser) -> Self {
         Self {
             path,
             parse,
+            edit_parse,
             state: Arc::new(Mutex::new(Vec::new())),
             watcher: None,
         }
@@ -39,7 +42,7 @@ impl SessionEngine {
     }
 
     pub fn edit_ops(&self) -> Vec<EditOp> {
-        read_edit_ops(&self.path).unwrap_or_default()
+        read_edit_ops(&self.path, self.edit_parse).unwrap_or_default()
     }
 
     pub fn created(&self) -> SystemTime {
@@ -111,12 +114,9 @@ impl SessionEngine {
     }
 }
 
-fn read_edit_ops(path: &Path) -> io::Result<Vec<EditOp>> {
+fn read_edit_ops(path: &Path, edit_parse: EditLineParser) -> io::Result<Vec<EditOp>> {
     let contents = fs::read_to_string(path)?;
-    Ok(contents
-        .lines()
-        .flat_map(edit_ops_from_line)
-        .collect())
+    Ok(contents.lines().flat_map(edit_parse).collect())
 }
 
 fn read_events(path: &Path, parse: LineParser) -> io::Result<Vec<Event>> {

@@ -7,7 +7,8 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, SystemTime};
 
-use beanz::cursor::{edit_ops_from_line, EditOp};
+use beanz::cursor::edit_ops_from_line;
+use beanz::EditOp;
 use beanz::score_snapshot::reconstruct_baseline;
 use beanz::AgentHarness;
 use harness_factory::HarnessFactory;

@@ -1,4 +1,4 @@
-use beanz::{score, Features};
+use beanz::{artifact_debt, score, session_debt, Features};
 
 fn idle() -> Features {
     Features::default()
@@ -52,54 +52,55 @@ fn trajectory_dump_raises_debt_above_idle() {
 }
 
 #[test]
-fn trajectory_deletions_lower_debt_below_dump() {
-    let dump = score(&agent_code_dump());
-    let trimmed = score(&after_deletions());
+fn trajectory_deletions_lower_artifact_below_dump() {
+    let dump = artifact_debt(&agent_code_dump());
+    let trimmed = artifact_debt(&after_deletions());
     assert!(trimmed < dump, "trimmed {trimmed} should be below dump {dump}");
 }
 
 #[test]
-fn trajectory_probes_lower_debt_below_deletions() {
-    let trimmed = score(&after_deletions());
-    let challenged = score(&after_probes());
+fn trajectory_probes_lower_artifact_below_deletions() {
+    let trimmed = artifact_debt(&after_deletions());
+    let challenged = artifact_debt(&after_probes());
     assert!(challenged < trimmed, "challenged {challenged} should be below trimmed {trimmed}");
 }
 
 #[test]
-fn trajectory_longer_prompts_alone_do_not_reduce_debt() {
-    let before = score(&after_deletions());
-    let after = score(&after_probes());
+fn trajectory_longer_prompts_raise_session_debt() {
+    let before = session_debt(&after_deletions());
     let mut prompts_only = after_deletions();
     prompts_only.prompt_chars = 20_000;
     prompts_only.user_turns = 12;
-    let prompts_score = score(&prompts_only);
+    let prompts_score = session_debt(&prompts_only);
     assert!(
-        (prompts_score - before).abs() < f64::EPSILON,
-        "prompt volume alone changed debt: {before} -> {prompts_score}"
+        prompts_score > before,
+        "prompt volume alone should raise session debt: {before} -> {prompts_score}"
     );
-    assert!(after < before);
 }
 
 #[test]
-fn trajectory_cleanup_below_baseline_returns_zero_debt() {
+fn trajectory_probes_do_not_lower_session_debt() {
+    let before = session_debt(&after_deletions());
+    let after = session_debt(&after_probes());
+    assert!(after >= before);
+}
+
+#[test]
+fn trajectory_cleanup_below_baseline_returns_zero_artifact() {
     let cleanup = Features {
         bytes_delta: -20_000,
         files_delta: -30,
         complexity_introduced: -50,
         ..Features::default()
     };
-    assert_eq!(score(&cleanup), 0.0);
+    assert_eq!(artifact_debt(&cleanup), 0.0);
 }
 
 #[test]
-fn trajectory_stepwise_debt_series_moves_down() {
-    let points = [
-        score(&idle()),
-        score(&agent_code_dump()),
-        score(&after_deletions()),
-        score(&after_probes()),
-    ];
-    assert!(points[1] > points[0]);
-    assert!(points[2] < points[1]);
-    assert!(points[3] < points[2]);
+fn trajectory_artifact_can_fall_while_session_rises() {
+    assert!(artifact_debt(&after_deletions()) < artifact_debt(&agent_code_dump()));
+    let mut growing = after_deletions();
+    growing.prompt_chars = 50_000;
+    growing.assistant_chars = 50_000;
+    assert!(session_debt(&growing) > session_debt(&after_deletions()));
 }

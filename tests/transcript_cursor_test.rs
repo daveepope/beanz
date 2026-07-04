@@ -48,6 +48,14 @@ fn parse_line_string_content_returns_event() {
 }
 
 #[test]
+fn parse_line_assistant_text_returns_assistant_chars() {
+    let line = r#"{"role":"assistant","message":{"content":[{"type":"text","text":"hello world"}]}}"#;
+    let event = parse_line(line).unwrap();
+    assert_eq!(event.role(), Role::Assistant);
+    assert_eq!(event.assistant_chars, 11);
+}
+
+#[test]
 fn parse_line_invalid_json_returns_none() {
     assert!(parse_line("not json").is_none());
 }

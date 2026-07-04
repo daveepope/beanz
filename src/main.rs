@@ -1,12 +1,19 @@
+use std::io::IsTerminal;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
 use beanz::scoring::Report;
-use beanz::{AgentHarness, ComplexityDelta, Harness};
+use beanz::{format_debt_line, transcript_chars, AgentHarness, ComplexityDelta, Harness};
 
 const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [session.jsonl]\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
+const DEBT_CEILING: f64 = 100.0;
+
+struct DisplayPeaks {
+    session: f64,
+    artifact: f64,
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -39,7 +46,7 @@ fn main() -> ExitCode {
                 eprintln!("failed to start session: {error}");
                 return ExitCode::FAILURE;
             }
-            print_report(&harness.calculate());
+            print_report(&harness.calculate(), None);
             ExitCode::SUCCESS
         }
         "watch" => {
@@ -143,8 +150,18 @@ fn parse_args(args: &[String]) -> Result<ParsedArgs, String> {
 
 fn run_watch(harness: &dyn Harness) {
     let mut last = String::new();
+    let mut peak_session = 0.0f64;
+    let mut peak_artifact = 0.0f64;
+    let color = std::io::stdout().is_terminal();
     loop {
-        let mut block = format_report(&harness.calculate());
+        let report = harness.calculate();
+        peak_session = peak_session.max(report.session_debt);
+        peak_artifact = peak_artifact.max(report.artifact_debt);
+        let peaks = DisplayPeaks {
+            session: peak_session,
+            artifact: peak_artifact,
+        };
+        let mut block = format_report(&report, Some(&peaks), color);
         for delta in harness.complexity_deltas() {
             block.push('\n');
             block.push_str(&format_delta(&delta));
@@ -175,17 +192,35 @@ fn display_path(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-fn print_report(report: &Report) {
-    println!("{}", format_report(report));
+fn print_report(report: &Report, peaks: Option<&DisplayPeaks>) {
+    let color = std::io::stdout().is_terminal();
+    println!("{}", format_report(report, peaks, color));
 }
 
-fn format_report(report: &Report) -> String {
+fn format_report(report: &Report, peaks: Option<&DisplayPeaks>, color: bool) -> String {
     let features = &report.features;
+    let session = peaks.map(|peak| peak.session).unwrap_or(report.session_debt);
+    let artifact = peaks.map(|peak| peak.artifact).unwrap_or(report.artifact_debt);
+    let debt = (session + artifact).clamp(0.0, DEBT_CEILING);
+    let context_kib = transcript_chars(features) as f64 / 1024.0;
+    let segments = features.user_turns + features.assistant_turns;
+    let debt_field = if debt < 10.0 {
+        format!("{debt:.2}")
+    } else {
+        format!("{debt:.1}")
+    };
+    let debt_grade = beanz::grade(debt);
     format!(
-        "debt={:.1} [{}] | turns={} autonomy={}/{} bytes={} files={} complexity={} probes={} reads={} shells={} edits={}B",
-        report.debt,
-        report.grade.label(),
+        "{}\n{}\ndebt={debt_field} [{}] | truncation={:.1}% [{}] depth=[{}] | context={:.1}KiB turns={}/{} autonomy={}/{} bytes={} files={} complexity={} probes={} reads={} shells={} edits={}B",
+        format_debt_line("session", session, color),
+        format_debt_line("artifact", artifact, color),
+        debt_grade.label(),
+        report.truncation.fill_ratio * 100.0,
+        report.truncation.grade.label(),
+        report.session_depth.grade.label(),
+        context_kib,
         features.user_turns,
+        segments,
         features.autonomy_streak,
         features.max_autonomy_run,
         features.bytes_delta,

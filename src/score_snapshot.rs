@@ -6,7 +6,7 @@ use std::time::SystemTime;
 use crate::complexity::{
     baseline_bytes, baseline_complexity, collect_source_files, complexity_of_source, Language,
 };
-use crate::cursor::transcript::EditOp;
+use crate::edits::EditOp;
 
 pub struct ScoreMaps {
     pub baseline: HashMap<PathBuf, u32>,

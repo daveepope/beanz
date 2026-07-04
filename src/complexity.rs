@@ -324,7 +324,7 @@ impl ComplexityEngine {
     pub fn start_for_score(
         &mut self,
         session_start: std::time::SystemTime,
-        edit_ops: &[crate::cursor::transcript::EditOp],
+        edit_ops: &[crate::edits::EditOp],
     ) -> notify::Result<()> {
         let maps = crate::score_snapshot::reconstruct_baseline(&self.root, session_start, edit_ops);
         if let Ok(mut guard) = self.state.lock() {

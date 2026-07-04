@@ -16,6 +16,7 @@ pub enum ToolKind {
 pub struct Event {
     pub role_user: bool,
     pub prompt_chars: usize,
+    pub assistant_chars: usize,
     pub probe_hits: usize,
     pub edit_bytes: usize,
     pub read_ops: usize,
@@ -49,6 +50,10 @@ impl Event {
 pub fn record_user_text(event: &mut Event, text: &str) {
     event.prompt_chars += text.chars().count();
     event.probe_hits += count_probes(text);
+}
+
+pub fn record_assistant_text(event: &mut Event, text: &str) {
+    event.assistant_chars += text.chars().count();
 }
 
 pub fn record_tool(event: &mut Event, kind: ToolKind, edit_bytes: usize) {

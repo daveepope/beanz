@@ -5,6 +5,8 @@ pub struct Features {
     pub user_turns: usize,
     pub assistant_turns: usize,
     pub prompt_chars: usize,
+    pub assistant_chars: usize,
+    pub read_est_chars: usize,
     pub edit_bytes: usize,
     pub read_ops: usize,
     pub shell_ops: usize,
@@ -15,6 +17,10 @@ pub struct Features {
     pub bytes_delta: i64,
     pub files_delta: i64,
     pub complexity_introduced: i64,
+}
+
+pub fn transcript_chars(features: &Features) -> usize {
+    features.prompt_chars + features.assistant_chars + features.read_est_chars
 }
 
 pub fn extract(events: &[Event]) -> Features {
@@ -32,6 +38,7 @@ pub fn extract(events: &[Event]) -> Features {
             run += 1;
             features.max_autonomy_run = features.max_autonomy_run.max(run);
         }
+        features.assistant_chars += event.assistant_chars;
         features.edit_bytes += event.edit_bytes;
         features.read_ops += event.read_ops;
         features.shell_ops += event.shell_ops;

@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   build:
@@ -22,7 +21,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -33,7 +32,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           tar czf "beanz-v${VERSION}-${TARGET}.tar.gz" -C "target/${TARGET}/release" beanz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: beanz-${{ matrix.target }}
           path: beanz-v*.tar.gz
@@ -42,17 +41,14 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.ref }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v5
         with:
           pattern: beanz-*
           path: dist
           merge-multiple: true
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: dist/*
       - name: Update formula
         env:
           VERSION: ${{ github.ref_name }}
@@ -71,14 +67,25 @@ jobs:
           sed -i "s/PLACEHOLDER_AARCH64_APPLE_DARWIN/${AARCH64}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_APPLE_DARWIN/${X86_64_MAC}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_UNKNOWN_LINUX_GNU/${LINUX}/" "$FORMULA"
-      - name: Open formula pull request
-        uses: peter-evans/create-pull-request@v7
+      - uses: softprops/action-gh-release@v2
         with:
-          base: main
-          branch: formula/${{ github.ref_name }}
-          delete-branch: true
-          title: Update Homebrew formula for ${{ github.ref_name }}
-          commit-message: Update Homebrew formula for ${{ github.ref_name }}
-          body: |
-            Automated checksum update for ${{ github.ref_name }}.
-            Merge after the GitHub Release assets are published.
+          files: |
+            dist/*
+            Formula/beanz.rb
+      - name: Push formula branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          BRANCH="formula/${GITHUB_REF_NAME}"
+          git checkout -B "$BRANCH"
+          git add Formula/beanz.rb
+          git diff --staged --quiet && exit 0
+          git commit -m "Update Homebrew formula for ${GITHUB_REF_NAME}"
+          git push --force origin "$BRANCH"
+      - name: Formula merge note
+        run: |
+          {
+            echo "## Homebrew formula"
+            echo "Open a PR from \`formula/${GITHUB_REF_NAME}\` into \`main\`."
+            echo "The updated \`Formula/beanz.rb\` is also attached to the GitHub Release."
+          } >> "$GITHUB_STEP_SUMMARY"

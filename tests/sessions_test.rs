@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use beanz::cursor::{
-    find_new_session, latest_session_in, newest_session, scan_sessions, session_root,
+    find_new_session, latest_session_at, latest_session_in, newest_session, scan_sessions,
+    session_root, wait_for_new_session_at, wait_for_new_session_in,
 };
 
 fn temp_root(tag: &str) -> PathBuf {
@@ -36,10 +37,11 @@ fn session_root_maps_workspace_to_cursor_layout() {
 }
 
 #[test]
-fn scan_sessions_collects_only_jsonl_files() {
+fn scan_sessions_collects_jsonl_skips_files_and_non_jsonl() {
     let root = temp_root("scan");
     let expected = write_session(&root, "alpha");
     fs::write(root.join("alpha").join("notes.txt"), "ignore me").unwrap();
+    fs::write(root.join("stray.txt"), "not a session dir").unwrap();
 
     let found = scan_sessions(&root);
 
@@ -100,4 +102,62 @@ fn latest_session_in_returns_single_existing_session() {
 
     assert_eq!(latest_session_in(&root).unwrap(), only);
     fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn latest_session_at_returns_seed_from_home_workspace_layout() {
+    let home = temp_root("home");
+    let workspace = home.join("project");
+    fs::create_dir_all(&workspace).unwrap();
+    let transcripts = session_root(&home, &workspace);
+    fs::create_dir_all(&transcripts).unwrap();
+    let seed = write_session(&transcripts, "seed");
+
+    assert_eq!(latest_session_at(&home, &workspace).unwrap(), seed);
+    fs::remove_dir_all(&home).ok();
+}
+
+#[test]
+fn wait_for_new_session_at_returns_fresh_after_seed() {
+    let home = temp_root("wait-home");
+    let workspace = home.join("project");
+    fs::create_dir_all(&workspace).unwrap();
+    let transcripts = session_root(&home, &workspace);
+    fs::create_dir_all(&transcripts).unwrap();
+    write_session(&transcripts, "seed");
+
+    let transcripts_for_writer = transcripts.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(400));
+        write_session(&transcripts_for_writer, "fresh")
+    });
+
+    let watched = wait_for_new_session_at(&home, &workspace).unwrap();
+    let created = writer.join().unwrap();
+    assert_eq!(watched, created);
+    fs::remove_dir_all(&home).ok();
+}
+
+#[test]
+fn wait_for_new_session_in_returns_fresh_after_seed() {
+    let root = temp_root("wait");
+    write_session(&root, "seed");
+    let root_for_writer = root.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(400));
+        write_session(&root_for_writer, "fresh")
+    });
+
+    let watched = wait_for_new_session_in(&root).unwrap();
+    let created = writer.join().unwrap();
+    assert_eq!(watched, created);
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn wait_for_new_session_in_missing_root_errors() {
+    let root = temp_root("wait-missing");
+    fs::remove_dir_all(&root).unwrap();
+
+    assert!(wait_for_new_session_in(&root).is_err());
 }

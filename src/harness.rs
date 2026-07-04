@@ -1,18 +1,19 @@
 use std::error::Error;
 use std::fmt;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::complexity::ComplexityDelta;
 use crate::cursor::CursorHarness;
 use crate::features::Features;
 use crate::scoring::{DebtSample, Report};
+use crate::strictness::WeightPreset;
 
 pub trait Harness {
     fn start(&mut self) -> notify::Result<()>;
-    fn start_for_score(&mut self) -> notify::Result<()>;
     fn stop(&mut self);
     fn features(&self) -> Features;
+    fn poll(&self) -> Report;
     fn calculate(&self) -> Report;
     fn complexity_deltas(&self) -> Vec<ComplexityDelta>;
     fn debt_series(&self) -> Vec<DebtSample>;
@@ -52,15 +53,32 @@ impl AgentHarness {
         }
     }
 
-    pub fn open(self, path: PathBuf) -> Box<dyn Harness> {
+    pub fn open(self, path: PathBuf, preset: WeightPreset) -> Box<dyn Harness> {
         let workspace_root = crate::workspace::workspace_root()
             .unwrap_or_else(|| PathBuf::from("."));
-        self.open_in(path, workspace_root)
+        self.open_in(path, workspace_root, preset)
     }
 
-    pub fn open_in(self, path: PathBuf, workspace_root: PathBuf) -> Box<dyn Harness> {
+    pub fn open_in(
+        self,
+        path: PathBuf,
+        workspace_root: PathBuf,
+        preset: WeightPreset,
+    ) -> Box<dyn Harness> {
         match self {
-            AgentHarness::Cursor => Box::new(CursorHarness::new(path, workspace_root)),
+            AgentHarness::Cursor => Box::new(CursorHarness::new(path, workspace_root, preset)),
+        }
+    }
+
+    pub fn latest_session_at(self, home: &Path, workspace: &Path) -> io::Result<PathBuf> {
+        match self {
+            AgentHarness::Cursor => crate::cursor::latest_session_at(home, workspace),
+        }
+    }
+
+    pub fn wait_for_new_session_at(self, home: &Path, workspace: &Path) -> io::Result<PathBuf> {
+        match self {
+            AgentHarness::Cursor => crate::cursor::wait_for_new_session_at(home, workspace),
         }
     }
 

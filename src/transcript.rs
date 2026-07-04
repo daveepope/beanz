@@ -16,9 +16,11 @@ pub enum ToolKind {
 pub struct Event {
     pub role_user: bool,
     pub prompt_chars: usize,
+    pub assistant_chars: usize,
     pub probe_hits: usize,
     pub edit_bytes: usize,
     pub read_ops: usize,
+    pub read_est_chars: usize,
     pub shell_ops: usize,
 }
 
@@ -51,10 +53,16 @@ pub fn record_user_text(event: &mut Event, text: &str) {
     event.probe_hits += count_probes(text);
 }
 
+pub fn record_assistant_text(event: &mut Event, text: &str) {
+    event.assistant_chars += text.chars().count();
+}
+
 pub fn record_tool(event: &mut Event, kind: ToolKind, edit_bytes: usize) {
     match kind {
         ToolKind::Edit => event.edit_bytes += edit_bytes,
-        ToolKind::Read => event.read_ops += 1,
+        ToolKind::Read => {
+            event.read_ops += 1;
+        }
         ToolKind::Shell => event.shell_ops += 1,
         ToolKind::Other => {}
     }

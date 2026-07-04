@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["David Pope"]
 description = "Cognitive debt scoring for AI coding sessions"
-license = "todo"
+license = "MIT"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

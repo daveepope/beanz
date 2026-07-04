@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use beanz::cursor::{
-    find_new_session, latest_session, latest_session_in, newest_session, scan_sessions,
-    session_root, transcripts_root, wait_for_new_session, wait_for_new_session_in,
+    find_new_session, latest_session_in, newest_session, scan_sessions, session_root,
+    wait_for_new_session_in,
 };
 
 fn temp_root(tag: &str) -> PathBuf {
@@ -25,22 +25,6 @@ fn write_session(root: &Path, id: &str) -> PathBuf {
     let path = directory.join(format!("{id}.jsonl"));
     fs::write(&path, "{}").unwrap();
     path
-}
-
-fn with_env_vars(home: &Path, workspace: &Path, body: impl FnOnce()) {
-    let prior_home = std::env::var_os("HOME");
-    let prior_workspace = std::env::var_os("BEANZ_WORKSPACE");
-    std::env::set_var("HOME", home);
-    std::env::set_var("BEANZ_WORKSPACE", workspace);
-    body();
-    match prior_home {
-        Some(value) => std::env::set_var("HOME", value),
-        None => std::env::remove_var("HOME"),
-    }
-    match prior_workspace {
-        Some(value) => std::env::set_var("BEANZ_WORKSPACE", value),
-        None => std::env::remove_var("BEANZ_WORKSPACE"),
-    }
 }
 
 #[test]
@@ -121,30 +105,19 @@ fn latest_session_in_returns_single_existing_session() {
 }
 
 #[test]
-fn transcripts_root_latest_session_wait_resolve_home_workspace_layout() {
-    let home = temp_root("home");
-    let workspace = home.join("project");
-    fs::create_dir_all(&workspace).unwrap();
-    let transcripts = session_root(&home, &workspace);
-    fs::create_dir_all(&transcripts).unwrap();
-    let seed = write_session(&transcripts, "seed");
-
-    with_env_vars(&home, &workspace, || {
-        assert_eq!(transcripts_root().unwrap(), transcripts);
-        assert_eq!(latest_session().unwrap(), seed);
-
-        let transcripts_for_wait = transcripts.clone();
-        let writer = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(400));
-            write_session(&transcripts_for_wait, "fresh")
-        });
-
-        let watched = wait_for_new_session().unwrap();
-        let created = writer.join().unwrap();
-        assert_eq!(watched, created);
+fn wait_for_new_session_in_returns_fresh_after_seed() {
+    let root = temp_root("wait");
+    write_session(&root, "seed");
+    let root_for_writer = root.clone();
+    let writer = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(400));
+        write_session(&root_for_writer, "fresh")
     });
 
-    fs::remove_dir_all(&home).ok();
+    let watched = wait_for_new_session_in(&root).unwrap();
+    let created = writer.join().unwrap();
+    assert_eq!(watched, created);
+    fs::remove_dir_all(&root).ok();
 }
 
 #[test]

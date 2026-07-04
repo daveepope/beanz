@@ -1,5 +1,6 @@
 use beanz::{
-    artifact_debt, report, resolve_preset, session_debt, Features, WeightPreset, WeightProfile,
+    artifact_debt, report, resolve_preset_inputs, session_debt, Features, WeightPreset,
+    WeightProfile,
 };
 
 fn heavy_features() -> Features {
@@ -16,65 +17,54 @@ fn heavy_features() -> Features {
     }
 }
 
-fn restore_env(name: &str, prior: Option<String>) {
-    match prior {
-        Some(value) => std::env::set_var(name, value),
-        None => std::env::remove_var(name),
-    }
-}
-
 #[test]
 fn resolve_preset_both_flags_returns_error() {
-    let error = resolve_preset(true, true).unwrap_err();
+    let error = resolve_preset_inputs(true, true, false, false).unwrap_err();
     assert!(error.contains("cannot use --lenient and --strict together"));
 }
 
 #[test]
 fn resolve_preset_no_inputs_returns_normal() {
-    let prior_lenient = std::env::var("BEANZ_LENIENT").ok();
-    let prior_strict = std::env::var("BEANZ_STRICT").ok();
-    std::env::remove_var("BEANZ_LENIENT");
-    std::env::remove_var("BEANZ_STRICT");
-    assert_eq!(resolve_preset(false, false).unwrap(), WeightPreset::Normal);
-    restore_env("BEANZ_LENIENT", prior_lenient);
-    restore_env("BEANZ_STRICT", prior_strict);
+    assert_eq!(
+        resolve_preset_inputs(false, false, false, false).unwrap(),
+        WeightPreset::Normal
+    );
 }
 
 #[test]
 fn resolve_preset_env_lenient_returns_lenient() {
-    let prior = std::env::var("BEANZ_LENIENT").ok();
-    std::env::set_var("BEANZ_LENIENT", "1");
-    assert_eq!(resolve_preset(false, false).unwrap(), WeightPreset::Lenient);
-    restore_env("BEANZ_LENIENT", prior);
+    assert_eq!(
+        resolve_preset_inputs(false, false, true, false).unwrap(),
+        WeightPreset::Lenient
+    );
 }
 
 #[test]
 fn resolve_preset_env_strict_returns_strict() {
-    let prior = std::env::var("BEANZ_STRICT").ok();
-    std::env::set_var("BEANZ_STRICT", "1");
-    assert_eq!(resolve_preset(false, false).unwrap(), WeightPreset::Strict);
-    restore_env("BEANZ_STRICT", prior);
+    assert_eq!(
+        resolve_preset_inputs(false, false, false, true).unwrap(),
+        WeightPreset::Strict
+    );
 }
 
 #[test]
 fn resolve_preset_env_both_set_returns_error() {
-    let prior_lenient = std::env::var("BEANZ_LENIENT").ok();
-    let prior_strict = std::env::var("BEANZ_STRICT").ok();
-    std::env::set_var("BEANZ_LENIENT", "1");
-    std::env::set_var("BEANZ_STRICT", "1");
-    let error = resolve_preset(false, false).unwrap_err();
+    let error = resolve_preset_inputs(false, false, true, true).unwrap_err();
     assert!(error.contains("BEANZ_LENIENT and BEANZ_STRICT cannot both be set"));
-    restore_env("BEANZ_LENIENT", prior_lenient);
-    restore_env("BEANZ_STRICT", prior_strict);
 }
 
 #[test]
 fn resolve_preset_env_strict_contradicts_lenient_flag_returns_error() {
-    let prior = std::env::var("BEANZ_STRICT").ok();
-    std::env::set_var("BEANZ_STRICT", "1");
-    let error = resolve_preset(true, false).unwrap_err();
+    let error = resolve_preset_inputs(true, false, false, true).unwrap_err();
     assert!(error.contains("contradicts --lenient"));
-    restore_env("BEANZ_STRICT", prior);
+}
+
+#[test]
+fn resolve_preset_cli_lenient_overrides_unset_env() {
+    assert_eq!(
+        resolve_preset_inputs(true, false, false, false).unwrap(),
+        WeightPreset::Lenient
+    );
 }
 
 #[test]

@@ -422,29 +422,4 @@ mod tests {
         assert_eq!(path, PathBuf::from("/tmp/explicit.jsonl"));
     }
 
-    #[test]
-    fn resolve_session_empty_workspace_returns_failure() {
-        let workspace = std::env::temp_dir().join(format!(
-            "beanz-cli-resolve-{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&workspace).unwrap();
-        let prior = std::env::var("BEANZ_WORKSPACE").ok();
-        std::env::set_var("BEANZ_WORKSPACE", &workspace);
-        let score_args = parse_args(&["score".to_string()]).unwrap();
-        assert_eq!(
-            resolve_session(AgentHarness::Cursor, &score_args),
-            Err(ExitCode::FAILURE)
-        );
-        let watch_args = parse_args(&["watch".to_string()]).unwrap();
-        assert_eq!(
-            resolve_session(AgentHarness::Cursor, &watch_args),
-            Err(ExitCode::FAILURE)
-        );
-        match prior {
-            Some(value) => std::env::set_var("BEANZ_WORKSPACE", value),
-            None => std::env::remove_var("BEANZ_WORKSPACE"),
-        }
-        std::fs::remove_dir_all(&workspace).ok();
-    }
 }

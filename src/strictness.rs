@@ -69,12 +69,23 @@ impl WeightProfile {
 }
 
 pub fn resolve_preset(cli_lenient: bool, cli_strict: bool) -> Result<WeightPreset, String> {
+    resolve_preset_inputs(
+        cli_lenient,
+        cli_strict,
+        env_enabled("BEANZ_LENIENT"),
+        env_enabled("BEANZ_STRICT"),
+    )
+}
+
+pub fn resolve_preset_inputs(
+    cli_lenient: bool,
+    cli_strict: bool,
+    env_lenient: bool,
+    env_strict: bool,
+) -> Result<WeightPreset, String> {
     if cli_lenient && cli_strict {
         return Err("cannot use --lenient and --strict together".to_string());
     }
-
-    let env_lenient = env_enabled("BEANZ_LENIENT");
-    let env_strict = env_enabled("BEANZ_STRICT");
 
     if env_lenient && env_strict {
         return Err("BEANZ_LENIENT and BEANZ_STRICT cannot both be set".to_string());

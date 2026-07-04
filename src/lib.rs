@@ -24,6 +24,6 @@ pub use scoring::{
     DebtSample, Grade, MiddleBurial, Report, Truncation,
 };
 pub use cli::run;
-pub use strictness::{resolve_preset, WeightPreset, WeightProfile};
+pub use strictness::{resolve_preset, resolve_preset_inputs, WeightPreset, WeightProfile};
 pub use session::SessionEngine;
 pub use transcript::{count_probes, Event, Role};

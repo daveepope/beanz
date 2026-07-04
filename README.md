@@ -1,26 +1,30 @@
 # beanz
 
+<p align="center">
+  <img src="assets/beanz-mascot.png" alt="beanz — sausage dog sitting beside a developer at work" width="480">
+</p>
+
 ## Overview
 
 beanz is a small companion for developers who want to keep an eye on cognitive debt while using AI coding agents. Think of it as a sausage dog cute, a bit annoying, and that's the point. It nudges you when you've vibed a little too hard, added too much collagen to the dish, and shipped something that works but that you (or the team) don't really understand. Working code isn't the same as understood code, and beanz watches your agent sessions and scores that gap so you know when to stop, commit, or break the work into something smaller.
 
-It's for developers who need to keep cognitive debt low on the code they're changing; managers who want juniors using AI productively without offloading every decision; students who want to stay productive with agents but still actually learn; and seasoned engineers who suspect they're driving the Ferrari before they've learned to handle a sedan. Teams can also wire it into CI on PRs if they want a gate — you'll need the chat transcripts. For background on why this matters, see [Cognitive debt is the real tax](https://martintrojer.github.io/post/2026-04-12-cognitive-debt-is-the-real-tax/) and the [cognitive-debt-prevention-kit](https://github.com/kesslernity/cognitive-debt-prevention-kit).
+It's for developers who need to keep cognitive debt low on the code they're changing; managers who want juniors using AI productively without offloading every decision; students who want to stay productive with agents but still actually learn; and seasoned engineers who suspect they're driving the Ferrari before they've learned to handle a sedan. Teams can also wire it into CI on PRs if they want a gate you'll need the chat transcripts. For background on why this matters, see [Cognitive debt is the real tax](https://martintrojer.github.io/post/2026-04-12-cognitive-debt-is-the-real-tax/) and the [cognitive-debt-prevention-kit](https://github.com/kesslernity/cognitive-debt-prevention-kit).
 
 ## Code vs artifact cognitive debt
 
-Every session gets two scores in the debt table. Both measure cognitive debt — the gap between what the agent produced and what you (and the team) actually understand — but they apply to different kinds of work.
+Every session gets two scores in the debt table. Both measure cognitive debt the gap between what the agent produced and what you (and the team) actually understand — but they apply to different kinds of work.
 
 ### Code cognitive debt
 
 Tracks sessions where you're **writing or changing code**. beanz looks at structural change (files touched), complexity introduced, context pressure (prompt size, reads, autonomy streaks), and whether you're still asking questions. High code debt usually means you've let the agent run ahead: lots of edits, rising complexity, shrinking context, fewer probes.
 
-**Use when:** implementing features, refactors, bug fixes, test changes — any session that ends up in the repo.
+**Use when:** implementing features, refactors, bug fixes, test changes any session that ends up in the repo.
 
 ### Artifact cognitive debt
 
-Tracks sessions where you're **producing prose artifacts** — research, notes, product requirements, high-level designs, RFCs, runbooks, and similar documents. It shares the same context and enquiry signals as code debt, but weights **volume of generated text** instead of cyclomatic or structural code metrics. Asking clarifying questions (probes) reduces artifact debt.
+Tracks sessions where you're **producing prose artifacts** research, notes, product requirements, high-level designs, RFCs, runbooks, and similar documents. It shares the same context and enquiry signals as code debt, but weights **volume of generated text** instead of cyclomatic or structural code metrics. Asking clarifying questions (probes) reduces artifact debt.
 
-**Use when:** drafting a PRD, exploring a problem in chat before coding, writing a design doc, or summarising research — work where the output is a document rather than a diff.
+**Use when:** drafting a PRD, exploring a problem in chat before coding, writing a design doc, or summarising research work where the output is a document rather than a diff.
 
 Both scores appear on every run; whichever lane matches what you're doing is the one to watch. A PRD session might show low code debt and rising artifact debt; a heavy coding session the opposite.
 
@@ -176,7 +180,7 @@ In the terminal, grade and meter bars are colour-coded (green → yellow → ora
 
 ## Release
 
-`main` is protected — all changes merge via pull request before tagging.
+`main` is protected all changes merge via pull request before tagging.
 
 ### 1. Prepare and merge to `main`
 
@@ -236,7 +240,7 @@ Integration tests live under `tests/`; shared transcript fixtures under `tests/h
 
 ## Developing using AI
 
-Agent instructions live in [`AGENTS.md`](AGENTS.md) — edit that file only.
+Agent instructions live in [`AGENTS.md`](AGENTS.md) edit that file only.
 
 [`sync_agent_rules.py`](sync_agent_rules.py) regenerates [`CLAUDE.md`](CLAUDE.md) and [`.cursor/rules/beanz-agent.mdc`](.cursor/rules/beanz-agent.mdc) from `AGENTS.md`:
 
@@ -251,7 +255,7 @@ Commit the updated `CLAUDE.md` and `.cursor/rules/beanz-agent.mdc` with any `AGE
 1. Fork the repo and create a branch from `main`.
 2. Make your changes; run `cargo test` before opening a PR.
 3. Open a pull request against `main` with a clear description of what changed and why.
-4. Address review feedback; `main` is protected — changes merge via PR only.
+4. Address review feedback; `main` is protected changes merge via PR only.
 
 ## License
 
@@ -261,4 +265,4 @@ See [`AI.md`](AI.md): no permission is granted to use this software or its sourc
 
 ## Authors
 
-- **David Pope** — [daveepope](https://github.com/daveepope)
+- **David Pope** [daveepope](https://github.com/daveepope)

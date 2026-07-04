@@ -1,3 +1,4 @@
+mod cli;
 pub mod complexity;
 pub mod cursor;
 pub mod display;
@@ -22,6 +23,7 @@ pub use scoring::{
     artifact_debt, grade, meter_pct, middle_burial, report, score, session_debt, truncation,
     DebtSample, Grade, MiddleBurial, Report, Truncation,
 };
+pub use cli::run;
 pub use strictness::{resolve_preset, WeightPreset, WeightProfile};
 pub use session::SessionEngine;
 pub use transcript::{count_probes, Event, Role};

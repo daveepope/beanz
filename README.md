@@ -12,7 +12,7 @@ It's for developers who need to keep cognitive debt low on the code they're chan
 
 ## Code vs artifact cognitive debt
 
-Every session gets two scores in the debt table. Both measure cognitive debt the gap between what the agent produced and what you (and the team) actually understand — but they apply to different kinds of work.
+Every session gets two scores in the debt table. Both measure cognitive debt the gap between what the agent produced and what you (and the team) actually understand but they apply to different kinds of work.
 
 ### Code cognitive debt
 

@@ -5,6 +5,25 @@
 beanz is a small companion for developers who want to keep an eye on cognitive debt while using AI coding agents. Think of it as a sausage dog cute, a bit annoying, and that's the point. It nudges you when you've vibed a little too hard, added too much collagen to the dish, and shipped something that works but that you (or the team) don't really understand. Working code isn't the same as understood code, and beanz watches your agent sessions and scores that gap so you know when to stop, commit, or break the work into something smaller.
 
 It's for developers who need to keep cognitive debt low on the code they're changing; managers who want juniors using AI productively without offloading every decision; students who want to stay productive with agents but still actually learn; and seasoned engineers who suspect they're driving the Ferrari before they've learned to handle a sedan. Teams can also wire it into CI on PRs if they want a gate — you'll need the chat transcripts. For background on why this matters, see [Cognitive debt is the real tax](https://martintrojer.github.io/post/2026-04-12-cognitive-debt-is-the-real-tax/) and the [cognitive-debt-prevention-kit](https://github.com/kesslernity/cognitive-debt-prevention-kit).
+
+## Code vs artifact cognitive debt
+
+Every session gets two scores in the debt table. Both measure cognitive debt — the gap between what the agent produced and what you (and the team) actually understand — but they apply to different kinds of work.
+
+### Code cognitive debt
+
+Tracks sessions where you're **writing or changing code**. beanz looks at structural change (files touched), complexity introduced, context pressure (prompt size, reads, autonomy streaks), and whether you're still asking questions. High code debt usually means you've let the agent run ahead: lots of edits, rising complexity, shrinking context, fewer probes.
+
+**Use when:** implementing features, refactors, bug fixes, test changes — any session that ends up in the repo.
+
+### Artifact cognitive debt
+
+Tracks sessions where you're **producing prose artifacts** — research, notes, product requirements, high-level designs, RFCs, runbooks, and similar documents. It shares the same context and enquiry signals as code debt, but weights **volume of generated text** instead of cyclomatic or structural code metrics. Asking clarifying questions (probes) reduces artifact debt.
+
+**Use when:** drafting a PRD, exploring a problem in chat before coding, writing a design doc, or summarising research — work where the output is a document rather than a diff.
+
+Both scores appear on every run; whichever lane matches what you're doing is the one to watch. A PRD session might show low code debt and rising artifact debt; a heavy coding session the opposite.
+
 ## How to Use beanz
 
 ### Install

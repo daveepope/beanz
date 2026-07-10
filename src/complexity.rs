@@ -16,6 +16,23 @@ pub enum Language {
     Java,
 }
 
+const RECOGNIZED_SOURCE_EXTENSIONS: &[&str] = &[
+    "rs", "py", "java", "js", "jsx", "mjs", "cjs", "ts", "tsx", "go", "c", "h", "cpp", "cc",
+    "cxx", "hpp", "hh", "cs", "rb", "php", "swift", "kt", "kts", "scala", "m", "mm", "sh",
+    "bash", "zsh", "pl", "lua",
+];
+
+pub fn is_source_extension(extension: &str) -> bool {
+    RECOGNIZED_SOURCE_EXTENSIONS.contains(&extension) || Language::from_extension(extension).is_some()
+}
+
+pub fn is_source_path(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(is_source_extension)
+        .unwrap_or(false)
+}
+
 impl Language {
     pub fn from_extension(extension: &str) -> Option<Self> {
         match extension {
@@ -120,7 +137,7 @@ const IGNORED_DIRS: &[&str] = &[
     "out",
 ];
 
-pub fn collect_source_files(root: &Path) -> Vec<PathBuf> {
+pub fn collect_all_files(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
     let mut stack = vec![root.to_path_buf()];
     while let Some(directory) = stack.pop() {
@@ -136,13 +153,20 @@ pub fn collect_source_files(root: &Path) -> Vec<PathBuf> {
                 if !is_ignored_dir(&path) {
                     stack.push(path);
                 }
-            } else if file_type.is_file() && Language::from_path(&path).is_some() {
+            } else if file_type.is_file() {
                 found.push(path);
             }
         }
     }
     found.sort();
     found
+}
+
+pub fn collect_source_files(root: &Path) -> Vec<PathBuf> {
+    collect_all_files(root)
+        .into_iter()
+        .filter(|path| Language::from_path(path).is_some())
+        .collect()
 }
 
 fn is_ignored_dir(path: &Path) -> bool {
@@ -198,7 +222,7 @@ pub fn file_bytes(path: &Path) -> u64 {
 }
 
 pub fn baseline_bytes(root: &Path) -> HashMap<PathBuf, u64> {
-    collect_source_files(root)
+    collect_all_files(root)
         .into_iter()
         .map(|path| (path.clone(), file_bytes(&path)))
         .collect()
@@ -255,27 +279,52 @@ fn total(map: &HashMap<PathBuf, u32>) -> u32 {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ComplexityDelta {
-    pub path: PathBuf,
-    pub baseline: u32,
-    pub current: u32,
+pub enum ComplexityDelta {
+    Complexity {
+        path: PathBuf,
+        baseline: u32,
+        current: u32,
+    },
+    Bytes {
+        path: PathBuf,
+        baseline: u64,
+        current: u64,
+    },
 }
 
 impl ComplexityDelta {
+    pub fn path(&self) -> &Path {
+        match self {
+            ComplexityDelta::Complexity { path, .. } => path,
+            ComplexityDelta::Bytes { path, .. } => path,
+        }
+    }
+
     pub fn delta(&self) -> i64 {
-        i64::from(self.current) - i64::from(self.baseline)
+        match self {
+            ComplexityDelta::Complexity {
+                baseline, current, ..
+            } => i64::from(*current) - i64::from(*baseline),
+            ComplexityDelta::Bytes {
+                baseline, current, ..
+            } => *current as i64 - *baseline as i64,
+        }
     }
 }
 
 pub fn compute_deltas(
     baseline: &HashMap<PathBuf, u32>,
     current: &HashMap<PathBuf, u32>,
+    baseline_bytes: &HashMap<PathBuf, u64>,
+    current_bytes: &HashMap<PathBuf, u64>,
 ) -> Vec<ComplexityDelta> {
     let mut deltas: Vec<ComplexityDelta> = Vec::new();
+    let mut scored: HashSet<PathBuf> = HashSet::new();
     for (path, &current_value) in current {
+        scored.insert(path.clone());
         let baseline_value = baseline.get(path).copied().unwrap_or(0);
         if current_value != baseline_value {
-            deltas.push(ComplexityDelta {
+            deltas.push(ComplexityDelta::Complexity {
                 path: path.clone(),
                 baseline: baseline_value,
                 current: current_value,
@@ -283,20 +332,40 @@ pub fn compute_deltas(
         }
     }
     for (path, &baseline_value) in baseline {
+        scored.insert(path.clone());
         if !current.contains_key(path) {
-            deltas.push(ComplexityDelta {
+            deltas.push(ComplexityDelta::Complexity {
                 path: path.clone(),
                 baseline: baseline_value,
                 current: 0,
             });
         }
     }
+
+    let mut byte_paths: HashSet<&PathBuf> = HashSet::new();
+    byte_paths.extend(baseline_bytes.keys());
+    byte_paths.extend(current_bytes.keys());
+    for path in byte_paths {
+        if scored.contains(path) {
+            continue;
+        }
+        let baseline_value = baseline_bytes.get(path).copied().unwrap_or(0);
+        let current_value = current_bytes.get(path).copied().unwrap_or(0);
+        if current_value != baseline_value {
+            deltas.push(ComplexityDelta::Bytes {
+                path: path.clone(),
+                baseline: baseline_value,
+                current: current_value,
+            });
+        }
+    }
+
     deltas.sort_by(|left, right| {
         right
             .delta()
             .abs()
             .cmp(&left.delta().abs())
-            .then_with(|| left.path.cmp(&right.path))
+            .then_with(|| left.path().cmp(right.path()))
     });
     deltas
 }
@@ -374,9 +443,6 @@ impl ComplexityEngine {
                     if is_ignored_descendant(&root, &path) {
                         continue;
                     }
-                    if Language::from_path(&path).is_none() {
-                        continue;
-                    }
                     if let Ok(mut guard) = state.lock() {
                         guard.disk_touched.insert(path);
                     }
@@ -407,12 +473,27 @@ impl ComplexityEngine {
 
     pub fn files_delta(&self) -> i64 {
         let guard = self.state.lock().expect("complexity state poisoned");
-        files_delta(&guard.baseline_bytes, &guard.current_bytes)
+        let baseline_count = guard
+            .baseline_bytes
+            .keys()
+            .filter(|path| Language::from_path(path).is_some())
+            .count() as i64;
+        let current_count = guard
+            .current_bytes
+            .keys()
+            .filter(|path| Language::from_path(path).is_some())
+            .count() as i64;
+        current_count - baseline_count
     }
 
     pub fn deltas(&self) -> Vec<ComplexityDelta> {
         let guard = self.state.lock().expect("complexity state poisoned");
-        compute_deltas(&guard.baseline, &guard.current)
+        compute_deltas(
+            &guard.baseline,
+            &guard.current,
+            &guard.baseline_bytes,
+            &guard.current_bytes,
+        )
     }
 }
 
@@ -421,7 +502,7 @@ fn paths_changed_since_open(
     session_open_bytes: &HashMap<PathBuf, u64>,
 ) -> HashSet<PathBuf> {
     let mut changed = HashSet::new();
-    let current_files: HashSet<PathBuf> = collect_source_files(root).into_iter().collect();
+    let current_files: HashSet<PathBuf> = collect_all_files(root).into_iter().collect();
 
     for path in &current_files {
         let size = file_bytes(path);

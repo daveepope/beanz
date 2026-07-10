@@ -1,5 +1,5 @@
 use crate::features::{transcript_chars, Features};
-use crate::strictness::{WeightPreset, WeightProfile};
+use crate::strictness::{Leniency, WeightProfile};
 
 const BYTES_WEIGHT: f64 = 1.0 / 256.0;
 const STRUCTURAL_WEIGHT: f64 = 3.0;
@@ -61,7 +61,7 @@ pub struct Report {
     pub artifact_debt: f64,
     pub debt: f64,
     pub grade: Grade,
-    pub preset: WeightPreset,
+    pub leniency: Leniency,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
@@ -73,7 +73,7 @@ pub struct DebtSample {
 }
 
 pub fn score(features: &Features) -> f64 {
-    report(features.clone(), WeightPreset::Normal).debt
+    report(features.clone(), Leniency::Normal).debt
 }
 
 pub fn grade(debt: f64) -> Grade {
@@ -128,8 +128,8 @@ fn round_debt(value: f64) -> f64 {
     value.clamp(0.0, DEBT_CEILING).round()
 }
 
-fn spec_gap_bump(features: &Features, profile: &WeightProfile) -> f64 {
-    (SPEC_GAP_WEIGHT * features.spec_gap * profile.spec_gap).min(SPEC_GAP_CAP)
+fn spec_gap_bump(spec_gap: f64, profile: &WeightProfile) -> f64 {
+    (SPEC_GAP_WEIGHT * spec_gap * profile.spec_gap).min(SPEC_GAP_CAP)
 }
 
 fn line_bump(features: &Features) -> f64 {
@@ -140,24 +140,29 @@ fn line_bump(features: &Features) -> f64 {
 fn shared_pressure(features: &Features, profile: &WeightProfile) -> f64 {
     let truncation = truncation(features, profile);
     let middle = middle_burial(features, profile);
-    truncation.risk + middle.risk + line_bump(features) + spec_gap_bump(features, profile)
+    truncation.risk + middle.risk + line_bump(features)
 }
 
 pub fn session_debt(features: &Features, profile: &WeightProfile) -> f64 {
     let cyclomatic =
         CYCLOMATIC_WEIGHT * features.cyclomatic_introduced.max(0) as f64 * profile.cyclomatic;
     let structural = STRUCTURAL_WEIGHT * features.files_delta.max(0) as f64 * profile.structural;
-    round_debt(shared_pressure(features, profile) + cyclomatic + structural)
+    let spec_gap = spec_gap_bump(features.code_spec_gap, profile);
+    round_debt(shared_pressure(features, profile) + spec_gap + cyclomatic + structural)
 }
 
 pub fn artifact_debt(features: &Features, profile: &WeightProfile) -> f64 {
-    let gross = shared_pressure(features, profile) + volume(features, profile).max(0.0);
+    let spec_gap = spec_gap_bump(
+        features.artifact_spec_gap + features.unlogged_spec_gap,
+        profile,
+    );
+    let gross = shared_pressure(features, profile) + spec_gap + volume(features, profile).max(0.0);
     let discount = PROBE_WEIGHT * features.probe_hits as f64 * profile.probe_relief;
     round_debt((gross - discount).max(0.0))
 }
 
-pub fn report(features: Features, preset: WeightPreset) -> Report {
-    let profile = preset.profile();
+pub fn report(features: Features, leniency: Leniency) -> Report {
+    let profile = leniency.profile();
     let truncation = truncation(&features, &profile);
     let middle = middle_burial(&features, &profile);
     let session = session_debt(&features, &profile);
@@ -172,7 +177,7 @@ pub fn report(features: Features, preset: WeightPreset) -> Report {
         artifact_debt: artifact,
         debt,
         grade,
-        preset,
+        leniency,
     }
 }
 

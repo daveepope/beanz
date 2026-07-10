@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime};
 use beanz::cursor::edit_ops_from_line;
 use beanz::EditOp;
 use beanz::score_snapshot::{reconstruct_baseline, touched_from_edit_ops};
-use beanz::{AgentHarness, WeightPreset};
+use beanz::{AgentHarness, Leniency};
 use harness_factory::HarnessFactory;
 
 struct CliMetrics {
@@ -31,7 +31,9 @@ fn run_score(session: &Path, workspace: &Path, verbose: bool) -> CliMetrics {
         .arg("score")
         .arg(session)
         .arg("--workspace")
-        .arg(workspace);
+        .arg(workspace)
+        .arg("--harness")
+        .arg("cursor");
     if verbose {
         command.arg("--verbose");
     }
@@ -115,7 +117,7 @@ fn score_matches_watch_final_sample() {
     let factory = HarnessFactory::cursor();
     let session_path = factory.session().user("why this approach").to_file();
 
-    let mut watch = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut watch = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), Leniency::Normal);
     watch.start().unwrap();
 
     fs::write(
@@ -177,7 +179,7 @@ fn read_only_session_zero_disk_metrics() {
         .user("explain more")
         .to_file();
 
-    let mut harness = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut harness = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), Leniency::Normal);
     harness.start().unwrap();
     let report = harness.calculate();
     harness.stop();
@@ -197,7 +199,7 @@ fn silent_disk_edit_raises_metrics() {
     let src = workspace.join("src");
     let path = HarnessFactory::cursor().session().to_file();
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), Leniency::Normal);
     harness.start().unwrap();
 
     fs::write(
@@ -215,6 +217,32 @@ fn silent_disk_edit_raises_metrics() {
     assert!(report.features.bytes_delta > 0);
     assert_eq!(report.features.files_delta, 1);
     assert!(report.features.cyclomatic_introduced > 0);
+}
+
+#[test]
+fn silent_markdown_edit_raises_artifact_volume_only() {
+    let workspace = workspace_with_src("markdown");
+    let path = HarnessFactory::cursor().session().to_file();
+
+    let mut harness =
+        AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), Leniency::Normal);
+    harness.start().unwrap();
+
+    fs::write(
+        workspace.join("PRD.md"),
+        "# Product Requirements\n\nSome prose describing the feature.",
+    )
+    .unwrap();
+    wait_for_disk();
+
+    let report = harness.calculate();
+    harness.stop();
+    fs::remove_file(&path).ok();
+    fs::remove_dir_all(&workspace).ok();
+
+    assert!(report.features.bytes_delta > 0);
+    assert_eq!(report.features.files_delta, 0);
+    assert_eq!(report.features.cyclomatic_introduced, 0);
 }
 
 #[test]
@@ -254,6 +282,43 @@ fn reverse_replay_strreplace_restores_baseline() {
     assert!(current > baseline);
     assert_eq!(baseline, 1);
     assert_eq!(current, 2);
+}
+
+#[test]
+fn reverse_replay_strreplace_prefix_new_string_terminates() {
+    let workspace = workspace_with_src("replay-shrink");
+    let source = workspace.join("src").join("app.py");
+    let old_string = "    pass\nEXTRA_TAIL_CONTENT_LINE\n";
+    let new_string = "    pass\n";
+    fs::write(&source, format!("def run():\n{new_string}")).unwrap();
+
+    let factory = HarnessFactory::cursor();
+    let session = factory
+        .session()
+        .str_replace("src/app.py", old_string, new_string);
+    let edit_ops = session
+        .lines()
+        .into_iter()
+        .flat_map(|line| edit_ops_from_line(&line))
+        .collect::<Vec<_>>();
+    let touched = touched_from_edit_ops(&workspace, &edit_ops);
+    let session_open = beanz::complexity::baseline_complexity(&workspace);
+    let session_open_bytes = beanz::complexity::baseline_bytes(&workspace);
+
+    let maps = reconstruct_baseline(
+        &workspace,
+        &edit_ops,
+        &touched,
+        &session_open,
+        &session_open_bytes,
+    );
+    fs::remove_dir_all(&workspace).ok();
+
+    let expected_baseline = format!("def run():\n{old_string}");
+    assert_eq!(
+        maps.baseline_bytes.get(&source).copied(),
+        Some(expected_baseline.len() as u64)
+    );
 }
 
 #[test]

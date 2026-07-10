@@ -291,6 +291,10 @@ python3 sync_agent_rules.py
 
 Commit the updated `CLAUDE.md` and `.cursor/rules/beanz-agent.mdc` with any `AGENTS.md` change.
 
+## TODO
+
+- Score subagent work: Claude Code sessions can delegate to subagents (e.g. Task-tool calls), whose turns are logged in the same transcript marked `isSidechain: true`. beanz currently excludes these from cognitive debt scoring; measuring their contribution is a future addition.
+
 ## Contributing
 
 1. Fork the repo and create a branch from `main`.

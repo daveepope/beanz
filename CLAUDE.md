@@ -27,7 +27,7 @@
 
 - Do not leak **implementation details** in public Rust surface area: exported types, traits, inherent methods, and user-visible panic or error strings.
 - Prefer **neutral names** in public identifiers, consistent with the naming rules above.
-- Keep the **`Harness`** trait and **`AgentHarness`** selector as the extension point for new agent backends (Cursor today); do not bake Cursor-specific types into the public API.
+- Keep the **`Harness`** trait and **`AgentHarness`** selector as the extension point for new agent backends (Cursor, Claude today); do not bake harness-specific types into the public API.
 
 ## Comments and documentation
 
@@ -36,7 +36,7 @@
 
 ## Crate layout and design
 
-- **Follow the established module layout** under `src/` (`complexity`, `cursor`, `features`, `harness`, `scoring`, `session`, `transcript`, `workspace`, etc.); do not invent parallel structures without a clear reason.
+- **Follow the established module layout** under `src/` (`claude`, `complexity`, `cursor`, `features`, `harness`, `scoring`, `session`, `transcript`, `workspace`, etc.); do not invent parallel structures without a clear reason.
 - Prefer **performance, speed, and efficiency** in scoring and transcript parsing code.
 - Keep behavior **testable**, follow **simple SOLID** shaping (single responsibility, small interfaces), and **avoid over-abstraction**.
 
@@ -52,7 +52,7 @@
 ## Build and verification
 
 - This is a **Cargo** project: **`cargo build`**, **`cargo test`**, and **`cargo beanz`** (when useful) are the authoritative checks.
-- The CLI binary is **`beanz`** with subcommands **`watch`** and **`score`**; default harness is **Cursor**.
+- The CLI binary is **`beanz`** with subcommands **`watch`** and **`score`**; default harness is **Claude**.
 - After changing **`Cargo.toml`** dependencies, run **`cargo test`** before considering work done.
 
 ## Maintainer (single source)

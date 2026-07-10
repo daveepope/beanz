@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use beanz::{AgentHarness, WeightPreset};
+use beanz::{AgentHarness, Leniency};
 use harness_factory::HarnessFactory;
-use beanz::cursor::session_root;
+use beanz::claude::session_root;
 
 fn empty_workspace(tag: &str) -> PathBuf {
     let root = std::env::temp_dir().join(format!(
@@ -43,7 +43,7 @@ fn calculate_disk_dump_raises_metrics_then_deletions_restore_baseline() {
     let workspace = workspace_with_src("disk-traj");
     let src = workspace.join("src");
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), Leniency::Normal);
     harness.start().unwrap();
 
     let idle = harness.calculate();
@@ -108,7 +108,7 @@ fn start_then_calculate_reflects_session() {
     let source = workspace.join("app.rs");
     fs::write(&source, "fn main() {}").unwrap();
 
-    let mut harness = selector.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut harness = selector.open_in(path.clone(), workspace.clone(), Leniency::Normal);
     harness.start().unwrap();
     let updated = "fn main() { if true {} if false {} if true {} }";
     fs::write(&source, updated).unwrap();
@@ -126,7 +126,7 @@ fn start_then_calculate_reflects_session() {
     fs::remove_dir_all(&workspace).ok();
 
     assert_eq!(report.features.user_turns, 1);
-    assert!(report.features.edit_bytes >= 300);
+    assert!(report.features.code_edit_bytes >= 300);
     assert!(report.features.probe_hits >= 1);
     assert!(report.features.cyclomatic_introduced > 0);
     assert!(report.debt > 0.0);
@@ -150,7 +150,7 @@ fn calculate_empty_session_returns_zero_debt() {
     let path = HarnessFactory::cursor().session().to_file();
     let workspace = empty_workspace("empty");
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), Leniency::Normal);
     harness.start().unwrap();
     let report = harness.calculate();
     harness.stop();
@@ -168,7 +168,7 @@ fn calculate_picks_up_appended_user_turn_without_notify() {
     let path = HarnessFactory::cursor().session().user("first").to_file();
     let workspace = empty_workspace("append");
 
-    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut harness = AgentHarness::Cursor.open_in(path.clone(), workspace.clone(), Leniency::Normal);
     harness.start().unwrap();
     assert_eq!(harness.calculate().features.user_turns, 1);
 
@@ -195,7 +195,7 @@ fn calculate_appends_timestamped_debt_samples() {
         .to_file();
     let workspace = empty_workspace("series");
 
-    let mut harness = selector.open_in(path.clone(), workspace.clone(), WeightPreset::Normal);
+    let mut harness = selector.open_in(path.clone(), workspace.clone(), Leniency::Normal);
     harness.start().unwrap();
     let first = harness.calculate();
     let second = harness.calculate();
@@ -240,8 +240,8 @@ fn run_score_watch_lenient_strict_print_mode_lines() {
         String::from_utf8_lossy(&lenient.stderr)
     );
     let lenient_out = String::from_utf8_lossy(&lenient.stdout);
-    assert!(lenient_out.contains("mode: lenient"));
-    assert!(lenient_out.contains("preset=lenient"));
+    assert!(lenient_out.contains("leniency: lenient"));
+    assert!(lenient_out.contains("leniency=lenient"));
 
     let strict = Command::new(beanz_exe())
         .args([
@@ -260,8 +260,8 @@ fn run_score_watch_lenient_strict_print_mode_lines() {
         String::from_utf8_lossy(&strict.stderr)
     );
     let strict_out = String::from_utf8_lossy(&strict.stdout);
-    assert!(strict_out.contains("mode: strict"));
-    assert!(strict_out.contains("preset=strict"));
+    assert!(strict_out.contains("leniency: strict"));
+    assert!(strict_out.contains("leniency=strict"));
 
     let watch = Command::new(beanz_exe())
         .args([
@@ -287,8 +287,8 @@ fn run_score_without_path_finds_latest_session_via_home_workspace_flags() {
     let workspace = home.join("project");
     fs::create_dir_all(&workspace).unwrap();
     let transcripts = session_root(&home, &workspace);
-    fs::create_dir_all(&transcripts.join("live")).unwrap();
-    let session = transcripts.join("live").join("live.jsonl");
+    fs::create_dir_all(&transcripts).unwrap();
+    let session = transcripts.join("live.jsonl");
     fs::write(&session, "{}\n").unwrap();
 
     let output = Command::new(beanz_exe())

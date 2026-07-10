@@ -3,13 +3,12 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
-use crate::cursor::{latest_session_in, session_root, wait_for_new_session_in};
 use crate::scoring::Report;
 use crate::{
-    refresh_block, resolve_preset, AgentHarness, ComplexityDelta, DebtTable, Harness, WeightPreset,
+    refresh_block, resolve_leniency, AgentHarness, ComplexityDelta, DebtTable, Harness, Leniency,
 };
 
-const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor>] [--home <path>] [--workspace <path>] [--watch-ticks <n>] [--lenient] [--strict] [--verbose] [--help] [session.jsonl]\n  default command: watch\n  session path alone: watch that file (beanz path/to/session.jsonl)\n  env: BEANZ_LENIENT=1 or BEANZ_STRICT=1 when no --lenient/--strict\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
+const USAGE: &str = "usage: beanz [watch|score] [--harness <cursor|claude>] [--home <path>] [--workspace <path>] [--watch-ticks <n>] [--lenient] [--strict] [--verbose] [--help] [session.jsonl]\n  default command: watch\n  session path alone: watch that file (beanz path/to/session.jsonl)\n  env: BEANZ_LENIENT=1 or BEANZ_STRICT=1 when no --lenient/--strict\n  watch (no path): follow the next session you start\n  score (no path): total for the most recent session";
 const SAMPLE_INTERVAL: Duration = Duration::from_millis(500);
 
 pub struct DisplayOptions {
@@ -50,8 +49,8 @@ pub fn run(args: Vec<String>) -> ExitCode {
         }
     };
 
-    let preset = match resolve_preset(parsed.lenient, parsed.strict) {
-        Ok(preset) => preset,
+    let leniency = match resolve_leniency(parsed.lenient, parsed.strict) {
+        Ok(leniency) => leniency,
         Err(message) => {
             eprintln!("{message}");
             eprintln!("{USAGE}");
@@ -70,14 +69,14 @@ pub fn run(args: Vec<String>) -> ExitCode {
         verbose: parsed.verbose,
     };
 
-    let mut harness = selector.open_in(path.clone(), workspace, preset);
+    let mut harness = selector.open_in(path.clone(), workspace, leniency);
     let code = match parsed.command.as_str() {
         "score" => {
             if let Err(error) = harness.start() {
                 eprintln!("failed to start session: {error}");
                 return ExitCode::FAILURE;
             }
-            print_report(&harness.calculate(), &display, preset);
+            print_report(&harness.calculate(), &display, leniency, selector.name());
             ExitCode::SUCCESS
         }
         "watch" => {
@@ -89,7 +88,8 @@ pub fn run(args: Vec<String>) -> ExitCode {
             run_watch_ticks(
                 harness.as_ref(),
                 &display,
-                preset,
+                leniency,
+                selector.name(),
                 parsed.watch_ticks.or_else(watch_tick_cap),
             );
             ExitCode::SUCCESS
@@ -106,7 +106,7 @@ pub fn run(args: Vec<String>) -> ExitCode {
 }
 
 pub(crate) fn parse_args(args: &[String]) -> Result<Option<ParsedArgs>, String> {
-    let mut harness = "cursor".to_string();
+    let mut harness = "claude".to_string();
     let mut verbose = false;
     let mut lenient = false;
     let mut strict = false;
@@ -206,10 +206,6 @@ fn workspace_for_run(parsed: &ParsedArgs) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."))
 }
 
-fn transcripts_dir(home: &Path, workspace: &Path) -> PathBuf {
-    session_root(home, workspace)
-}
-
 pub(crate) fn resolve_session(
     selector: AgentHarness,
     parsed: &ParsedArgs,
@@ -220,10 +216,8 @@ pub(crate) fn resolve_session(
         return Ok(PathBuf::from(path));
     }
 
-    let transcripts = transcripts_dir(home, workspace);
-
     if parsed.command == "score" {
-        return match latest_session_in(&transcripts) {
+        return match selector.latest_session_at(home, workspace) {
             Ok(path) => {
                 eprintln!("scoring last session: {}", path.display());
                 Ok(path)
@@ -239,7 +233,7 @@ pub(crate) fn resolve_session(
         "waiting for new session to start [{}] (ctrl-c to cancel)…",
         selector.name()
     );
-    match wait_for_new_session_in(&transcripts) {
+    match selector.wait_for_new_session_at(home, workspace) {
         Ok(path) => {
             eprintln!("session started: {}", path.display());
             Ok(path)
@@ -254,7 +248,8 @@ pub(crate) fn resolve_session(
 pub(crate) fn run_watch_ticks(
     harness: &dyn Harness,
     display: &DisplayOptions,
-    preset: WeightPreset,
+    leniency: Leniency,
+    harness_name: &str,
     ticks: Option<usize>,
 ) {
     let mut last = String::new();
@@ -264,7 +259,7 @@ pub(crate) fn run_watch_ticks(
     let mut remaining = ticks;
     loop {
         let report = harness.poll();
-        let mut block = format_report(&report, color, display.verbose, preset, &table);
+        let mut block = format_report(&report, color, display.verbose, leniency, harness_name, &table);
         for delta in harness.complexity_deltas() {
             block.push('\n');
             block.push_str(&format_delta(&delta));
@@ -292,12 +287,19 @@ pub(crate) fn run_watch_ticks(
 }
 
 pub(crate) fn format_delta(delta: &ComplexityDelta) -> String {
+    let suffix = match delta {
+        ComplexityDelta::Complexity {
+            baseline, current, ..
+        } => format!("cc {baseline}->{current}"),
+        ComplexityDelta::Bytes {
+            baseline, current, ..
+        } => format!("bytes {baseline}->{current}"),
+    };
     format!(
-        "    {:+} {} (cc {}->{})",
+        "    {:+} {} ({})",
         delta.delta(),
-        display_path(&delta.path),
-        delta.baseline,
-        delta.current,
+        display_path(delta.path()),
+        suffix,
     )
 }
 
@@ -309,12 +311,17 @@ pub(crate) fn display_path(path: &Path) -> String {
         .unwrap_or_else(|| path.display().to_string())
 }
 
-pub(crate) fn print_report(report: &Report, display: &DisplayOptions, preset: WeightPreset) {
+pub(crate) fn print_report(
+    report: &Report,
+    display: &DisplayOptions,
+    leniency: Leniency,
+    harness_name: &str,
+) {
     let color = std::io::stdout().is_terminal();
     let table = DebtTable::new();
     println!(
         "{}",
-        format_report(report, color, display.verbose, preset, &table)
+        format_report(report, color, display.verbose, leniency, harness_name, &table)
     );
 }
 
@@ -322,12 +329,16 @@ pub(crate) fn format_report(
     report: &Report,
     color: bool,
     verbose: bool,
-    preset: WeightPreset,
+    leniency: Leniency,
+    harness_name: &str,
     table: &DebtTable,
 ) -> String {
     let features = &report.features;
-    let profile = preset.profile();
-    let mut lines = vec![format!("mode: {}", preset.label())];
+    let profile = leniency.profile();
+    let mut lines = vec![
+        format!("harness: {harness_name}"),
+        format!("leniency: {}", leniency.label()),
+    ];
     lines.push(table.format(
         report.session_debt,
         report.artifact_debt,
@@ -340,8 +351,8 @@ pub(crate) fn format_report(
         let transcript_kib = transcript_chars(features) as f64 / 1024.0;
         let log_lines = features.user_turns + features.assistant_turns;
         lines.push(format!(
-            "preset={} transcript={transcript_kib:.1}KiB prompts={} log_lines={} autonomy={}/{} bytes={} cyclomatic={} structural={} spec_gap={:.1} probes={} reads={} shells={} edits={}B",
-            preset.label(),
+            "leniency={} transcript={transcript_kib:.1}KiB prompts={} log_lines={} autonomy={}/{} bytes={} cyclomatic={} structural={} code_spec_gap={:.1} artifact_spec_gap={:.1} probes={} reads={} shells={} code_edits={}B artifact_edits={}B",
+            leniency.label(),
             features.user_turns,
             log_lines,
             features.autonomy_streak,
@@ -349,11 +360,13 @@ pub(crate) fn format_report(
             features.bytes_delta,
             features.cyclomatic_introduced,
             features.files_delta,
-            features.spec_gap,
+            features.code_spec_gap,
+            features.artifact_spec_gap,
             features.probe_hits,
             features.read_ops,
             features.shell_ops,
-            features.edit_bytes,
+            features.code_edit_bytes,
+            features.artifact_edit_bytes,
         ));
     }
     lines.join("\n")
@@ -373,13 +386,13 @@ mod tests {
     use super::*;
     use crate::complexity::ComplexityDelta;
     use crate::cursor::session_root;
-    use crate::{DebtTable, Features, WeightPreset};
+    use crate::{DebtTable, Features, Leniency};
 
     #[test]
     fn parse_args_empty_argv_defaults_watch() {
         let parsed = parse_args(&[]).unwrap().unwrap();
         assert_eq!(parsed.command, "watch");
-        assert_eq!(parsed.harness, "cursor");
+        assert_eq!(parsed.harness, "claude");
         assert!(parsed.path.is_none());
     }
 
@@ -440,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    fn format_report_verbose_shows_preset_line() {
+    fn format_report_verbose_shows_leniency_line() {
         let report = crate::scoring::report(
             Features {
                 user_turns: 2,
@@ -449,25 +462,48 @@ mod tests {
                 bytes_delta: 10,
                 ..Features::default()
             },
-            WeightPreset::Lenient,
+            Leniency::Lenient,
         );
         let table = DebtTable::new();
-        let block = format_report(&report, false, true, WeightPreset::Lenient, &table);
-        assert!(block.contains("mode: lenient"));
-        assert!(block.contains("preset=lenient"));
+        let block = format_report(&report, false, true, Leniency::Lenient, "claude", &table);
+        assert!(block.contains("harness: claude"));
+        assert!(block.contains("leniency: lenient"));
+        assert!(block.contains("leniency=lenient"));
         assert!(block.contains("bytes=10"));
+    }
+
+    #[test]
+    fn format_report_harness_name_shown_as_own_line() {
+        let report = crate::scoring::report(Features::default(), Leniency::Normal);
+        let table = DebtTable::new();
+        let block = format_report(&report, false, false, Leniency::Normal, "cursor", &table);
+        assert!(block.contains("harness: cursor"));
+        assert!(block.contains("leniency: normal"));
     }
 
     #[test]
     fn format_delta_relative_path_shows_cc_change() {
         let cwd = std::env::current_dir().unwrap();
-        let line = format_delta(&ComplexityDelta {
+        let line = format_delta(&ComplexityDelta::Complexity {
             path: cwd.join("src/cli.rs"),
             baseline: 1,
             current: 3,
         });
         assert!(line.contains("src/cli.rs"));
         assert!(line.contains("+2"));
+    }
+
+    #[test]
+    fn format_delta_non_source_path_shows_byte_change() {
+        let cwd = std::env::current_dir().unwrap();
+        let line = format_delta(&ComplexityDelta::Bytes {
+            path: cwd.join("notes.txt"),
+            baseline: 0,
+            current: 200,
+        });
+        assert!(line.contains("notes.txt"));
+        assert!(line.contains("bytes 0->200"));
+        assert!(line.contains("+200"));
     }
 
     #[test]
@@ -482,14 +518,14 @@ mod tests {
             run(vec![
                 "score".to_string(),
                 "--harness".to_string(),
-                "claude".to_string(),
+                "windsurf".to_string(),
             ]),
             ExitCode::from(2)
         );
     }
 
     #[test]
-    fn run_conflicting_presets_exits_2() {
+    fn run_conflicting_leniency_flags_exits_2() {
         assert_eq!(
             run(vec![
                 "--lenient".to_string(),
@@ -580,6 +616,35 @@ mod tests {
         };
         assert_eq!(
             resolve_session(AgentHarness::Cursor, &parsed, &workspace, &home).unwrap(),
+            session
+        );
+        std::fs::remove_dir_all(&home).ok();
+    }
+
+    #[test]
+    fn resolve_session_claude_selector_finds_latest_in_claude_transcripts() {
+        let home = std::env::temp_dir().join(format!(
+            "beanz-cli-claude-latest-{}",
+            std::process::id()
+        ));
+        let workspace = home.join("project");
+        let transcripts = crate::claude::session_root(&home, &workspace);
+        std::fs::create_dir_all(&transcripts).unwrap();
+        let session = transcripts.join("seed.jsonl");
+        std::fs::write(&session, "{}").unwrap();
+        let parsed = ParsedArgs {
+            command: "score".to_string(),
+            harness: "claude".to_string(),
+            path: None,
+            workspace: None,
+            home: None,
+            watch_ticks: None,
+            verbose: false,
+            lenient: false,
+            strict: false,
+        };
+        assert_eq!(
+            resolve_session(AgentHarness::Claude, &parsed, &workspace, &home).unwrap(),
             session
         );
         std::fs::remove_dir_all(&home).ok();

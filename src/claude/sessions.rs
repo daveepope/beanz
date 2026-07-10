@@ -8,13 +8,13 @@ fn session_env() -> Result<(PathBuf, PathBuf), io::Error> {
     let home = std::env::var_os("HOME").ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
-            "could not resolve Cursor session directory for this workspace",
+            "could not resolve Claude session directory for this workspace",
         )
     })?;
     let workspace = crate::workspace::workspace_root().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
-            "could not resolve Cursor session directory for this workspace",
+            "could not resolve Claude session directory for this workspace",
         )
     })?;
     Ok((PathBuf::from(home), workspace))
@@ -26,17 +26,13 @@ pub fn transcripts_root() -> Option<PathBuf> {
 }
 
 pub fn session_root(home: &Path, workspace: &Path) -> PathBuf {
-    home.join(".cursor")
+    home.join(".claude")
         .join("projects")
         .join(workspace_slug(workspace))
-        .join("agent-transcripts")
 }
 
 fn workspace_slug(workspace: &Path) -> String {
-    workspace
-        .to_string_lossy()
-        .trim_start_matches('/')
-        .replace('/', "-")
+    workspace.to_string_lossy().replace('/', "-")
 }
 
 pub fn scan_sessions(root: &Path) -> Vec<PathBuf> {
@@ -45,18 +41,9 @@ pub fn scan_sessions(root: &Path) -> Vec<PathBuf> {
         return sessions;
     };
     for entry in entries.flatten() {
-        let directory = entry.path();
-        if !directory.is_dir() {
-            continue;
-        }
-        let Ok(inner) = fs::read_dir(&directory) else {
-            continue;
-        };
-        for file in inner.flatten() {
-            let path = file.path();
-            if path.extension().and_then(|ext| ext.to_str()) == Some("jsonl") {
-                sessions.push(path);
-            }
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) == Some("jsonl") {
+            sessions.push(path);
         }
     }
     sessions
@@ -93,7 +80,7 @@ pub fn wait_for_new_session() -> io::Result<PathBuf> {
 }
 
 pub fn wait_for_new_session_in(root: &Path) -> io::Result<PathBuf> {
-    crate::session_scan::wait_for_new_session_in(root, "Cursor", scan_sessions)
+    crate::session_scan::wait_for_new_session_in(root, "Claude", scan_sessions)
 }
 
 #[cfg(test)]

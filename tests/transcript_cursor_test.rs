@@ -51,13 +51,13 @@ fn parse_line_mixed_session_records_roles_tools_and_probes() {
     assert!(user.probe_hits >= 2);
 
     let write = parse_line(&lines[1]).unwrap();
-    assert_eq!(write.edit_bytes, 4);
+    assert_eq!(write.code_edit_bytes, 4);
 
     let replace = parse_line(&lines[2]).unwrap();
-    assert_eq!(replace.edit_bytes, 6);
+    assert_eq!(replace.code_edit_bytes, 6);
 
     let edit = parse_line(&lines[3]).unwrap();
-    assert_eq!(edit.edit_bytes, 2);
+    assert_eq!(edit.code_edit_bytes, 2);
 
     let read = parse_line(&lines[4]).unwrap();
     assert_eq!(read.read_ops, 1);
@@ -74,7 +74,7 @@ fn parse_line_mixed_session_records_roles_tools_and_probes() {
     let other = parse_line(&lines[8]).unwrap();
     assert_eq!(other.read_ops, 0);
     assert_eq!(other.shell_ops, 0);
-    assert_eq!(other.edit_bytes, 0);
+    assert_eq!(other.code_edit_bytes, 0);
 
     let string_user =
         parse_line(r#"{"role":"user","message":{"content":"plain question"}}"#).unwrap();
@@ -97,7 +97,7 @@ fn parse_line_mixed_session_records_roles_tools_and_probes() {
         r#"{"role":"assistant","message":{"content":[{"type":"tool_use","name":"Write"}]}}"#,
     )
     .unwrap();
-    assert_eq!(sparse.edit_bytes, 0);
+    assert_eq!(sparse.code_edit_bytes, 0);
 
     let non_text = parse_line(
         r#"{"role":"assistant","message":{"content":[{"type":"image","source":"x"}]}}"#,
@@ -233,4 +233,16 @@ fn read_est_chars_session_lifecycle_estimates_workspace_reads() {
 
     fs::remove_file(&path).ok();
     teardown_workspace(&workspace);
+}
+
+#[test]
+fn parse_line_edit_markdown_path_records_artifact_edit_bytes() {
+    let factory = HarnessFactory::cursor();
+    let line = factory.tool_call_line(
+        "Edit",
+        r#"{"path":"docs/PRD.md","old_string":"a","new_string":"abcd"}"#,
+    );
+    let event = parse_line(&line).unwrap();
+    assert_eq!(event.artifact_edit_bytes, 4);
+    assert_eq!(event.code_edit_bytes, 0);
 }

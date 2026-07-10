@@ -70,8 +70,8 @@ fn format_debt_table_code_suggestions_lost_in_the_middle_risk() {
 fn format_debt_table_code_suggestions_spec_gap_risk() {
     let features = Features {
         prompt_chars: 40,
-        edit_bytes: 8_000,
-        spec_gap: 200.0,
+        code_edit_bytes: 8_000,
+        code_spec_gap: 200.0,
         ..Features::default()
     };
     let table = format_debt_table(ABOVE, BELOW, &features, &WeightProfile::normal(), false);

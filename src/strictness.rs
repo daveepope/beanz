@@ -1,5 +1,5 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WeightPreset {
+pub enum Leniency {
     Lenient,
     Normal,
     Strict,
@@ -17,10 +17,10 @@ pub struct WeightProfile {
     pub suggestion_threshold: f64,
 }
 
-impl WeightPreset {
+impl Leniency {
     pub fn profile(self) -> WeightProfile {
         match self {
-            WeightPreset::Lenient => WeightProfile {
+            Leniency::Lenient => WeightProfile {
                 truncation: 0.75,
                 middle: 0.75,
                 spec_gap: 0.8,
@@ -30,8 +30,8 @@ impl WeightPreset {
                 probe_relief: 1.3,
                 suggestion_threshold: 1.25,
             },
-            WeightPreset::Normal => WeightProfile::normal(),
-            WeightPreset::Strict => WeightProfile {
+            Leniency::Normal => WeightProfile::normal(),
+            Leniency::Strict => WeightProfile {
                 truncation: 1.25,
                 middle: 1.25,
                 spec_gap: 1.2,
@@ -46,9 +46,9 @@ impl WeightPreset {
 
     pub fn label(self) -> &'static str {
         match self {
-            WeightPreset::Lenient => "lenient",
-            WeightPreset::Normal => "normal",
-            WeightPreset::Strict => "strict",
+            Leniency::Lenient => "lenient",
+            Leniency::Normal => "normal",
+            Leniency::Strict => "strict",
         }
     }
 }
@@ -68,8 +68,8 @@ impl WeightProfile {
     }
 }
 
-pub fn resolve_preset(cli_lenient: bool, cli_strict: bool) -> Result<WeightPreset, String> {
-    resolve_preset_inputs(
+pub fn resolve_leniency(cli_lenient: bool, cli_strict: bool) -> Result<Leniency, String> {
+    resolve_leniency_inputs(
         cli_lenient,
         cli_strict,
         env_enabled("BEANZ_LENIENT"),
@@ -77,12 +77,12 @@ pub fn resolve_preset(cli_lenient: bool, cli_strict: bool) -> Result<WeightPrese
     )
 }
 
-pub fn resolve_preset_inputs(
+pub fn resolve_leniency_inputs(
     cli_lenient: bool,
     cli_strict: bool,
     env_lenient: bool,
     env_strict: bool,
-) -> Result<WeightPreset, String> {
+) -> Result<Leniency, String> {
     if cli_lenient && cli_strict {
         return Err("cannot use --lenient and --strict together".to_string());
     }
@@ -95,25 +95,25 @@ pub fn resolve_preset_inputs(
         if env_strict {
             return Err("BEANZ_STRICT contradicts --lenient".to_string());
         }
-        return Ok(WeightPreset::Lenient);
+        return Ok(Leniency::Lenient);
     }
 
     if cli_strict {
         if env_lenient {
             return Err("BEANZ_LENIENT contradicts --strict".to_string());
         }
-        return Ok(WeightPreset::Strict);
+        return Ok(Leniency::Strict);
     }
 
     if env_lenient {
-        return Ok(WeightPreset::Lenient);
+        return Ok(Leniency::Lenient);
     }
 
     if env_strict {
-        return Ok(WeightPreset::Strict);
+        return Ok(Leniency::Strict);
     }
 
-    Ok(WeightPreset::Normal)
+    Ok(Leniency::Normal)
 }
 
 #[cfg(test)]
@@ -121,8 +121,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn resolve_preset_reads_current_env_without_panic() {
-        let _ = resolve_preset(false, false);
+    fn resolve_leniency_reads_current_env_without_panic() {
+        let _ = resolve_leniency(false, false);
     }
 }
 

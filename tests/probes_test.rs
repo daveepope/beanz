@@ -27,11 +27,13 @@ fn event_roles_record_text_and_all_tool_kinds() {
     assert_eq!(assistant.assistant_chars, 2);
 
     let mut tools = Event::default();
-    record_tool(&mut tools, ToolKind::Edit, 10);
-    record_tool(&mut tools, ToolKind::Read, 0);
-    record_tool(&mut tools, ToolKind::Shell, 0);
-    record_tool(&mut tools, ToolKind::Other, 99);
-    assert_eq!(tools.edit_bytes, 10);
+    record_tool(&mut tools, ToolKind::Edit, 10, true);
+    record_tool(&mut tools, ToolKind::Edit, 7, false);
+    record_tool(&mut tools, ToolKind::Read, 0, true);
+    record_tool(&mut tools, ToolKind::Shell, 0, true);
+    record_tool(&mut tools, ToolKind::Other, 99, true);
+    assert_eq!(tools.code_edit_bytes, 10);
+    assert_eq!(tools.artifact_edit_bytes, 7);
     assert_eq!(tools.read_ops, 1);
     assert_eq!(tools.shell_ops, 1);
 }

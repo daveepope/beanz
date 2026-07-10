@@ -1,4 +1,5 @@
 mod cli;
+pub mod claude;
 pub mod complexity;
 pub mod cursor;
 pub mod display;
@@ -7,6 +8,7 @@ pub mod features;
 pub mod harness;
 pub mod score_snapshot;
 pub mod scoring;
+mod session_scan;
 pub mod strictness;
 pub mod session;
 pub mod transcript;
@@ -24,7 +26,7 @@ pub use scoring::{
     DebtSample, Grade, MiddleBurial, Report, Truncation,
 };
 pub use cli::run;
-pub use strictness::{resolve_preset, resolve_preset_inputs, WeightPreset, WeightProfile};
+pub use strictness::{resolve_leniency, resolve_leniency_inputs, Leniency, WeightProfile};
 pub use session::SessionEngine;
 pub use transcript::{count_probes, Event, Role};
 pub use workspace::{git_root, resolve_workspace, workspace_root};

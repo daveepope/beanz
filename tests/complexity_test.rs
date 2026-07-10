@@ -144,16 +144,37 @@ fn compute_deltas_reports_increase_decrease_and_removal() {
         (path_same.clone(), 5),
     ]);
 
-    let deltas = compute_deltas(&baseline, &current);
+    let deltas = compute_deltas(&baseline, &current, &HashMap::new(), &HashMap::new());
 
     let summarized: Vec<(PathBuf, i64)> = deltas
         .iter()
-        .map(|delta| (delta.path.clone(), delta.delta()))
+        .map(|delta| (delta.path().to_path_buf(), delta.delta()))
         .collect();
     assert_eq!(
         summarized,
         vec![(path_up, 5), (path_gone, -4), (path_down, -2)]
     );
+}
+
+#[test]
+fn compute_deltas_nonsource_file_reports_byte_change() {
+    let path_notes = PathBuf::from("/repo/notes.txt");
+
+    let baseline_bytes = HashMap::from([(path_notes.clone(), 10)]);
+    let current_bytes = HashMap::from([(path_notes.clone(), 210)]);
+
+    let deltas = compute_deltas(
+        &HashMap::new(),
+        &HashMap::new(),
+        &baseline_bytes,
+        &current_bytes,
+    );
+
+    let summarized: Vec<(PathBuf, i64)> = deltas
+        .iter()
+        .map(|delta| (delta.path().to_path_buf(), delta.delta()))
+        .collect();
+    assert_eq!(summarized, vec![(path_notes, 200)]);
 }
 
 #[test]
@@ -221,6 +242,29 @@ fn engine_detects_new_file_after_start() {
 
     assert!(engine.bytes_delta() > 0);
     assert!(engine.introduced() > 0);
+    engine.stop();
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn engine_detects_markdown_file_as_artifact_bytes_only() {
+    use beanz::complexity::ComplexityEngine;
+
+    let root = std::env::temp_dir().join(format!(
+        "beanz-engine-artifact-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+    ));
+    fs::create_dir_all(&root).unwrap();
+
+    let mut engine = ComplexityEngine::new(root.clone());
+    engine.start().unwrap();
+    fs::write(root.join("PRD.md"), "# Product Requirements\n\nSome prose.").unwrap();
+    engine.sync_from_session(&[]);
+
+    assert!(engine.bytes_delta() > 0);
+    assert_eq!(engine.files_delta(), 0);
+    assert_eq!(engine.introduced(), 0);
     engine.stop();
     fs::remove_dir_all(&root).ok();
 }

@@ -217,11 +217,14 @@ pub fn refresh_block(previous_lines: &mut usize, block: &str) {
     if *previous_lines > 0 {
         let _ = write!(out, "\x1b[{previous_lines}A");
     }
-    let _ = write!(out, "{block}");
-    if !block.ends_with('\n') {
-        let _ = writeln!(out);
+    let _ = write!(out, "\r\x1b[J");
+    for (i, line) in block.lines().enumerate() {
+        if i > 0 {
+            let _ = write!(out, "\r\n");
+        }
+        let _ = write!(out, "{line}");
     }
-    let _ = write!(out, "\x1b[J");
+    let _ = writeln!(out, "\r");
     let _ = out.flush();
     *previous_lines = block.lines().count().max(1);
 }
@@ -257,16 +260,16 @@ fn shared_feature_lines(features: &Features) -> Vec<FeatureLine> {
             label: "probes",
             value: features.probe_hits.to_string(),
         },
-        FeatureLine {
-            label: "spec_gap_risk",
-            value: format_spec_gap(features.spec_gap),
-        },
     ]
 }
 
 fn code_feature_lines(features: &Features) -> Vec<FeatureLine> {
     let mut lines = shared_feature_lines(features);
     lines.extend([
+        FeatureLine {
+            label: "spec_gap_risk",
+            value: format_spec_gap(features.code_spec_gap),
+        },
         FeatureLine {
             label: "cyclomatic_risk",
             value: features.cyclomatic_introduced.to_string(),
@@ -281,10 +284,20 @@ fn code_feature_lines(features: &Features) -> Vec<FeatureLine> {
 
 fn artifact_feature_lines(features: &Features) -> Vec<FeatureLine> {
     let mut lines = shared_feature_lines(features);
-    lines.push(FeatureLine {
-        label: "bytes",
-        value: features.bytes_delta.to_string(),
-    });
+    lines.extend([
+        FeatureLine {
+            label: "spec_gap_risk",
+            value: format_spec_gap(features.artifact_spec_gap + features.unlogged_spec_gap),
+        },
+        FeatureLine {
+            label: "bytes",
+            value: features.bytes_delta.to_string(),
+        },
+        FeatureLine {
+            label: "chat_artifact_chars",
+            value: features.unlogged_artifact_chars.to_string(),
+        },
+    ]);
     lines
 }
 
@@ -309,7 +322,7 @@ fn code_suggestions(features: &Features, score: f64, profile: &WeightProfile) ->
     let structural_score =
         STRUCTURAL_WEIGHT * features.files_delta.max(0) as f64 * profile.structural;
     let spec_gap_score =
-        (SPEC_GAP_WEIGHT * features.spec_gap * profile.spec_gap).min(SPEC_GAP_CAP);
+        (SPEC_GAP_WEIGHT * features.code_spec_gap * profile.spec_gap).min(SPEC_GAP_CAP);
     let scale = profile.suggestion_threshold;
 
     let mut ranked: Vec<(&'static str, f64)> = Vec::new();
@@ -341,8 +354,10 @@ fn artifact_suggestions(
     }
     let trunc = truncation(features, profile);
     let middle = middle_burial(features, profile);
-    let spec_gap_score =
-        (SPEC_GAP_WEIGHT * features.spec_gap * profile.spec_gap).min(SPEC_GAP_CAP);
+    let spec_gap_score = (SPEC_GAP_WEIGHT
+        * (features.artifact_spec_gap + features.unlogged_spec_gap)
+        * profile.spec_gap)
+        .min(SPEC_GAP_CAP);
     let scale = profile.suggestion_threshold;
 
     let mut ranked: Vec<(&'static str, f64)> = Vec::new();
@@ -467,7 +482,7 @@ fn grade_color(grade: Grade) -> &'static str {
 mod tests {
     use super::*;
     use crate::features::Features;
-    use crate::strictness::WeightPreset;
+    use crate::strictness::Leniency;
     use crate::strictness::WeightProfile;
 
     fn normal() -> WeightProfile {
@@ -586,8 +601,8 @@ mod tests {
             max_autonomy_run: 0,
             ..Features::default()
         };
-        let lenient = code_suggestions(&features, 30.0, &WeightPreset::Lenient.profile());
-        let strict = code_suggestions(&features, 30.0, &WeightPreset::Strict.profile());
+        let lenient = code_suggestions(&features, 30.0, &Leniency::Lenient.profile());
+        let strict = code_suggestions(&features, 30.0, &Leniency::Strict.profile());
         assert!(!lenient.contains(&"truncation_risk"));
         assert!(strict.contains(&"truncation_risk"));
     }

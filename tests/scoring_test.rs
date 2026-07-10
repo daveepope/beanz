@@ -1,4 +1,4 @@
-use beanz::{Features, Grade, WeightPreset, WeightProfile, artifact_debt, grade, meter_pct, middle_burial, report, score, session_debt, truncation};
+use beanz::{Features, Grade, Leniency, WeightProfile, artifact_debt, grade, meter_pct, middle_burial, report, score, session_debt, truncation};
 
 const DEBT_CEILING: f64 = 100.0;
 
@@ -129,7 +129,7 @@ fn report_exposes_truncation_and_middle() {
         max_autonomy_run: 3,
         ..Features::default()
     };
-    let built = report(features.clone(), WeightPreset::Normal);
+    let built = report(features.clone(), Leniency::Normal);
     assert_eq!(built.truncation, truncation(&features, &WeightProfile::normal()));
     assert_eq!(built.middle, middle_burial(&features, &WeightProfile::normal()));
     assert!(built.session_debt > 0.0);
@@ -155,7 +155,7 @@ fn grade_thresholds_return_expected_bands() {
 
 #[test]
 fn report_consistent_with_score_and_grade() {
-    let built = report(heavy_dump(), WeightPreset::Normal);
+    let built = report(heavy_dump(), Leniency::Normal);
     assert_eq!(built.debt, score(&built.features));
     assert_eq!(built.grade, grade(built.debt));
     assert_eq!(
@@ -263,8 +263,8 @@ fn session_debt_rises_with_spec_gap() {
     }, &WeightProfile::normal());
     let blind = session_debt(&Features {
         prompt_chars: 40,
-        edit_bytes: 8_000,
-        spec_gap: 200.0,
+        code_edit_bytes: 8_000,
+        code_spec_gap: 200.0,
         ..Features::default()
     }, &WeightProfile::normal());
     assert!(blind > bare);
@@ -274,10 +274,58 @@ fn session_debt_rises_with_spec_gap() {
 fn artifact_debt_rises_with_spec_gap() {
     let bare = artifact_debt(&moderate_dump(), &WeightProfile::normal());
     let blind = artifact_debt(&Features {
-        spec_gap: 200.0,
+        artifact_spec_gap: 200.0,
         ..moderate_dump()
     }, &WeightProfile::normal());
     assert!(blind > bare);
+}
+
+#[test]
+fn artifact_debt_rises_with_unlogged_spec_gap() {
+    let bare = artifact_debt(&moderate_dump(), &WeightProfile::normal());
+    let blind = artifact_debt(&Features {
+        unlogged_spec_gap: 200.0,
+        ..moderate_dump()
+    }, &WeightProfile::normal());
+    assert!(blind > bare);
+}
+
+#[test]
+fn artifact_debt_ignores_code_spec_gap() {
+    let bare = artifact_debt(&moderate_dump(), &WeightProfile::normal());
+    let blind = artifact_debt(&Features {
+        code_spec_gap: 200.0,
+        ..moderate_dump()
+    }, &WeightProfile::normal());
+    assert_eq!(blind, bare);
+}
+
+#[test]
+fn session_debt_ignores_artifact_spec_gap() {
+    let bare = session_debt(&Features {
+        prompt_chars: 4_000,
+        ..Features::default()
+    }, &WeightProfile::normal());
+    let blind = session_debt(&Features {
+        prompt_chars: 4_000,
+        artifact_spec_gap: 200.0,
+        ..Features::default()
+    }, &WeightProfile::normal());
+    assert_eq!(blind, bare);
+}
+
+#[test]
+fn session_debt_ignores_unlogged_spec_gap() {
+    let bare = session_debt(&Features {
+        prompt_chars: 4_000,
+        ..Features::default()
+    }, &WeightProfile::normal());
+    let blind = session_debt(&Features {
+        prompt_chars: 4_000,
+        unlogged_spec_gap: 200.0,
+        ..Features::default()
+    }, &WeightProfile::normal());
+    assert_eq!(blind, bare);
 }
 
 #[test]
@@ -332,7 +380,7 @@ fn report_exposes_context_and_changes() {
         max_autonomy_run: 3,
         ..Features::default()
     };
-    let built = report(features, WeightPreset::Normal);
+    let built = report(features, Leniency::Normal);
     assert!(built.session_debt > 0.0);
     assert_eq!(built.session_debt, session_debt(&built.features, &WeightProfile::normal()));
     assert_eq!(built.artifact_debt, artifact_debt(&built.features, &WeightProfile::normal()));

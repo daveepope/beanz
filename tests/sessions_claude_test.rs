@@ -3,14 +3,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use beanz::cursor::{
+use beanz::claude::{
     find_new_session, latest_session_at, latest_session_in, newest_session, scan_sessions,
     session_root, wait_for_new_session_at, wait_for_new_session_in,
 };
 
 fn temp_root(tag: &str) -> PathBuf {
     let unique = format!(
-        "beanz-sessions-{tag}-{}-{:?}",
+        "beanz-sessions-claude-{tag}-{}-{:?}",
         std::process::id(),
         std::time::SystemTime::now()
     );
@@ -20,31 +20,30 @@ fn temp_root(tag: &str) -> PathBuf {
 }
 
 fn write_session(root: &Path, id: &str) -> PathBuf {
-    let directory = root.join(id);
-    fs::create_dir_all(&directory).unwrap();
-    let path = directory.join(format!("{id}.jsonl"));
+    let path = root.join(format!("{id}.jsonl"));
     fs::write(&path, "{}").unwrap();
     path
 }
 
 #[test]
-fn session_root_maps_workspace_to_cursor_layout() {
+fn session_root_maps_workspace_to_claude_layout() {
     let root = session_root(Path::new("/home/user"), Path::new("/home/user/repos/arena"));
     assert_eq!(
         root,
-        Path::new("/home/user/.cursor/projects/home-user-repos-arena/agent-transcripts")
+        Path::new("/home/user/.claude/projects/-home-user-repos-arena")
     );
 }
 
 #[test]
-fn scan_sessions_collects_jsonl_skips_files_and_non_jsonl() {
+fn scan_sessions_collects_flat_jsonl_skips_non_jsonl() {
     let root = temp_root("scan");
     let expected = write_session(&root, "alpha");
-    fs::write(root.join("alpha").join("notes.txt"), "ignore me").unwrap();
-    fs::write(root.join("stray.txt"), "not a session dir").unwrap();
+    fs::write(root.join("notes.txt"), "ignore me").unwrap();
+    fs::create_dir_all(root.join("memory")).unwrap();
+    fs::write(root.join("memory").join("MEMORY.md"), "ignore me too").unwrap();
 
-    let found = scan_sessions(&root);
-
+    let mut found = scan_sessions(&root);
+    found.sort();
     assert_eq!(found, vec![expected]);
     fs::remove_dir_all(&root).ok();
 }
@@ -80,11 +79,6 @@ fn newest_session_returns_most_recently_modified() {
     ];
 
     assert_eq!(newest_session(dated), Some(newer));
-}
-
-#[test]
-fn newest_session_returns_none_when_empty() {
-    assert_eq!(newest_session(Vec::new()), None);
 }
 
 #[test]

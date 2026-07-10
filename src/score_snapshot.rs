@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::complexity::{complexity_of, complexity_of_source, file_bytes, Language};
+use crate::complexity::{complexity_of, complexity_of_source, file_bytes};
 use crate::edits::EditOp;
 
 pub struct ScoreMaps {
@@ -86,10 +86,8 @@ fn replay_baseline(
 fn current_for_paths(paths: &HashSet<PathBuf>) -> HashMap<PathBuf, u32> {
     paths
         .iter()
-        .filter_map(|path| {
-            path.is_file()
-                .then(|| (path.clone(), complexity_of(path).unwrap_or(0)))
-        })
+        .filter(|path| path.is_file())
+        .filter_map(|path| complexity_of(path).map(|value| (path.clone(), value)))
         .collect()
 }
 
@@ -103,10 +101,7 @@ fn bytes_for_paths(paths: &HashSet<PathBuf>) -> HashMap<PathBuf, u64> {
 pub fn touched_from_edit_ops(root: &Path, edit_ops: &[EditOp]) -> HashSet<PathBuf> {
     let mut touched = HashSet::new();
     for op in edit_ops {
-        let resolved = resolve_path(root, op.path());
-        if Language::from_path(&resolved).is_some() {
-            touched.insert(resolved);
-        }
+        touched.insert(resolve_path(root, op.path()));
     }
     touched
 }
@@ -132,10 +127,7 @@ fn reverse_apply(content: &mut Option<String>, op: &EditOp) {
             ..
         } => {
             if let Some(text) = content {
-                while let Some(pos) = text.find(new_string.as_str()) {
-                    let end = pos + new_string.len();
-                    text.replace_range(pos..end, old_string.as_str());
-                }
+                *text = text.replace(new_string.as_str(), old_string.as_str());
             }
         }
     }

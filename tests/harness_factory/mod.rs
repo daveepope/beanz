@@ -20,6 +20,10 @@ impl HarnessFactory {
         Self::new(AgentHarness::Cursor)
     }
 
+    pub fn claude() -> Self {
+        Self::new(AgentHarness::Claude)
+    }
+
     pub fn harness(&self) -> AgentHarness {
         self.harness
     }
@@ -99,6 +103,9 @@ fn render_user(harness: AgentHarness, text: &str) -> String {
         AgentHarness::Cursor => format!(
             r#"{{"role":"user","message":{{"content":[{{"type":"text","text":{encoded}}}]}}}}"#
         ),
+        AgentHarness::Claude => format!(
+            r#"{{"type":"user","message":{{"role":"user","content":[{{"type":"text","text":{encoded}}}]}}}}"#
+        ),
     }
 }
 
@@ -106,6 +113,9 @@ fn render_tool_call(harness: AgentHarness, name: &str, input: &str) -> String {
     match harness {
         AgentHarness::Cursor => format!(
             r#"{{"role":"assistant","message":{{"content":[{{"type":"tool_use","name":"{name}","input":{input}}}]}}}}"#
+        ),
+        AgentHarness::Claude => format!(
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"tool_use","name":"{name}","input":{input}}}]}}}}"#
         ),
     }
 }
@@ -116,17 +126,27 @@ fn render_write(harness: AgentHarness, bytes: usize) -> String {
         AgentHarness::Cursor => {
             render_tool_call(harness, "Write", &format!(r#"{{"contents":"{payload}"}}"#))
         }
+        AgentHarness::Claude => {
+            render_tool_call(harness, "Write", &format!(r#"{{"content":"{payload}"}}"#))
+        }
     }
 }
 
 fn render_write_at(harness: AgentHarness, path: &str, contents: &str) -> String {
-    let path = serde_json::to_string(path).unwrap();
-    let contents = serde_json::to_string(contents).unwrap();
-    render_tool_call(
-        harness,
-        "Write",
-        &format!(r#"{{"path":{path},"contents":{contents}}}"#),
-    )
+    let encoded_path = serde_json::to_string(path).unwrap();
+    let encoded_contents = serde_json::to_string(contents).unwrap();
+    match harness {
+        AgentHarness::Cursor => render_tool_call(
+            harness,
+            "Write",
+            &format!(r#"{{"path":{encoded_path},"contents":{encoded_contents}}}"#),
+        ),
+        AgentHarness::Claude => render_tool_call(
+            harness,
+            "Write",
+            &format!(r#"{{"file_path":{encoded_path},"content":{encoded_contents}}}"#),
+        ),
+    }
 }
 
 fn render_str_replace(
@@ -135,12 +155,23 @@ fn render_str_replace(
     old_string: &str,
     new_string: &str,
 ) -> String {
-    let path = serde_json::to_string(path).unwrap();
+    let encoded_path = serde_json::to_string(path).unwrap();
     let old_string = serde_json::to_string(old_string).unwrap();
     let new_string = serde_json::to_string(new_string).unwrap();
-    render_tool_call(
-        harness,
-        "StrReplace",
-        &format!(r#"{{"path":{path},"old_string":{old_string},"new_string":{new_string}}}"#),
-    )
+    match harness {
+        AgentHarness::Cursor => render_tool_call(
+            harness,
+            "StrReplace",
+            &format!(
+                r#"{{"path":{encoded_path},"old_string":{old_string},"new_string":{new_string}}}"#
+            ),
+        ),
+        AgentHarness::Claude => render_tool_call(
+            harness,
+            "Edit",
+            &format!(
+                r#"{{"file_path":{encoded_path},"old_string":{old_string},"new_string":{new_string}}}"#
+            ),
+        ),
+    }
 }

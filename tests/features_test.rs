@@ -9,10 +9,10 @@ fn user(prompt_chars: usize, probe_hits: usize) -> Event {
     }
 }
 
-fn assistant_edit(edit_bytes: usize) -> Event {
+fn assistant_edit(code_edit_bytes: usize) -> Event {
     Event {
         role_user: false,
-        edit_bytes,
+        code_edit_bytes,
         ..Event::default()
     }
 }
@@ -25,11 +25,29 @@ fn assistant_read() -> Event {
     }
 }
 
+fn user_document_task(prompt_chars: usize) -> Event {
+    Event {
+        role_user: true,
+        prompt_chars,
+        document_task: true,
+        ..Event::default()
+    }
+}
+
+fn assistant_text(assistant_chars: usize) -> Event {
+    Event {
+        role_user: false,
+        assistant_chars,
+        ..Event::default()
+    }
+}
+
 #[test]
 fn extract_empty_returns_zeroed_features() {
     let features = extract(&[]);
     assert_eq!(features, Features::default());
-    assert_eq!(features.spec_gap, 0.0);
+    assert_eq!(features.code_spec_gap, 0.0);
+    assert_eq!(features.artifact_spec_gap, 0.0);
 }
 
 #[test]
@@ -44,7 +62,7 @@ fn extract_counts_user_and_assistant_turns() {
 fn extract_blind_accept_returns_large_spec_gap() {
     let events = [user(2, 0), assistant_edit(400)];
     let features = extract(&events);
-    assert!(features.spec_gap > 100.0);
+    assert!(features.code_spec_gap > 100.0);
 }
 
 #[test]
@@ -86,4 +104,32 @@ fn extract_ends_on_user_turn_zeros_autonomy_streak() {
     let features = extract(&events);
     assert_eq!(features.max_autonomy_run, 3);
     assert_eq!(features.autonomy_streak, 0);
+}
+
+#[test]
+fn extract_document_task_prompt_counts_unlogged_chars() {
+    let events = [user_document_task(20), assistant_text(500)];
+    let features = extract(&events);
+    assert_eq!(features.unlogged_artifact_chars, 500);
+    assert!(features.unlogged_spec_gap > 0.0);
+}
+
+#[test]
+fn extract_plain_prompt_ignores_assistant_chars() {
+    let events = [user(20, 0), assistant_text(500)];
+    let features = extract(&events);
+    assert_eq!(features.unlogged_artifact_chars, 0);
+    assert_eq!(features.unlogged_spec_gap, 0.0);
+}
+
+#[test]
+fn extract_document_task_window_closes_on_next_user_turn() {
+    let events = [
+        user_document_task(20),
+        assistant_text(500),
+        user(10, 0),
+        assistant_text(300),
+    ];
+    let features = extract(&events);
+    assert_eq!(features.unlogged_artifact_chars, 500);
 }

@@ -1,0 +1,75 @@
+[package]
+name = "beanz-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+beanz = { path = ".." }
+libfuzzer-sys = "=0.4.13"
+
+[[bin]]
+name = "parse_claude_line"
+path = "fuzz_targets/parse_claude_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_cursor_line"
+path = "fuzz_targets/parse_cursor_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cyclomatic_rust"
+path = "fuzz_targets/cyclomatic_rust.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cyclomatic_python"
+path = "fuzz_targets/cyclomatic_python.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "cyclomatic_java"
+path = "fuzz_targets/cyclomatic_java.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_est_claude_line"
+path = "fuzz_targets/read_est_claude_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_est_cursor_line"
+path = "fuzz_targets/read_est_cursor_line.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_est_claude_session"
+path = "fuzz_targets/read_est_claude_session.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_est_cursor_session"
+path = "fuzz_targets/read_est_cursor_session.rs"
+test = false
+doc = false
+bench = false

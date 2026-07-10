@@ -2,8 +2,12 @@
 
 [![CI](https://github.com/daveepope/beanz/actions/workflows/build-test.yml/badge.svg?branch=main)](https://github.com/daveepope/beanz/actions/workflows/build-test.yml)
 [![codecov](https://codecov.io/gh/daveepope/beanz/graph/badge.svg?branch=main)](https://codecov.io/gh/daveepope/beanz)
+[![Release](https://img.shields.io/github/v/release/daveepope/beanz)](https://github.com/daveepope/beanz/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/daveepope/beanz/badge)](https://scorecard.dev/viewer/?uri=github.com/daveepope/beanz)
 [![OSV-Scanner](https://github.com/daveepope/beanz/actions/workflows/osv-scanner.yml/badge.svg?branch=main)](https://github.com/daveepope/beanz/actions/workflows/osv-scanner.yml)
+[![Dependency Review](https://github.com/daveepope/beanz/actions/workflows/dependency-review.yml/badge.svg?branch=main)](https://github.com/daveepope/beanz/actions/workflows/dependency-review.yml)
+[![Dependency Release Age](https://github.com/daveepope/beanz/actions/workflows/dependency-release-age.yml/badge.svg?branch=main)](https://github.com/daveepope/beanz/actions/workflows/dependency-release-age.yml)
 
 <p align="center">
   <img src="assets/beanz-mascot.png" alt="beanz, sausage dog sitting beside a developer at work" width="480">

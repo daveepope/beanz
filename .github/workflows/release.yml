@@ -67,7 +67,7 @@ jobs:
           sed -i "s/PLACEHOLDER_AARCH64_APPLE_DARWIN/${AARCH64}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_APPLE_DARWIN/${X86_64_MAC}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_UNKNOWN_LINUX_GNU/${LINUX}/" "$FORMULA"
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*

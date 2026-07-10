@@ -27,10 +27,10 @@ fn write_session(root: &Path, id: &str) -> PathBuf {
 
 #[test]
 fn session_root_maps_workspace_to_claude_layout() {
-    let root = session_root(Path::new("/home/dave"), Path::new("/home/dave/repos/arena"));
+    let root = session_root(Path::new("/home/user"), Path::new("/home/user/repos/arena"));
     assert_eq!(
         root,
-        Path::new("/home/dave/.claude/projects/-home-dave-repos-arena")
+        Path::new("/home/user/.claude/projects/-home-user-repos-arena")
     );
 }
 

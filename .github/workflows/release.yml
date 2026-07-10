@@ -6,10 +6,12 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
+    permissions:
+      contents: read
     strategy:
       matrix:
         include:
@@ -21,8 +23,8 @@ jobs:
             target: x86_64-unknown-linux-gnu
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           targets: ${{ matrix.target }}
       - run: cargo build --release --target ${{ matrix.target }}
@@ -32,7 +34,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           tar czf "beanz-v${VERSION}-${TARGET}.tar.gz" -C "target/${TARGET}/release" beanz
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
         with:
           name: beanz-${{ matrix.target }}
           path: beanz-v*.tar.gz
@@ -40,15 +42,24 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           ref: ${{ github.ref }}
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
           pattern: beanz-*
           path: dist
           merge-multiple: true
+      - uses: sigstore/cosign-installer@ba7bc0a3fef59531c69a25acd34668d6d3fe6f22
+      - name: Sign release archives
+        run: |
+          for archive in dist/*.tar.gz; do
+            cosign sign-blob "$archive" --bundle "${archive}.sigstore" --yes
+          done
       - name: Update formula
         env:
           VERSION: ${{ github.ref_name }}
@@ -67,7 +78,7 @@ jobs:
           sed -i "s/PLACEHOLDER_AARCH64_APPLE_DARWIN/${AARCH64}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_APPLE_DARWIN/${X86_64_MAC}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_UNKNOWN_LINUX_GNU/${LINUX}/" "$FORMULA"
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
           files: |
             dist/*

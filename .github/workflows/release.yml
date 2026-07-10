@@ -34,7 +34,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           tar czf "beanz-v${VERSION}-${TARGET}.tar.gz" -C "target/${TARGET}/release" beanz
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: beanz-${{ matrix.target }}
           path: beanz-v*.tar.gz
@@ -49,7 +49,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           ref: ${{ github.ref }}
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: beanz-*
           path: dist
@@ -78,7 +78,7 @@ jobs:
           sed -i "s/PLACEHOLDER_AARCH64_APPLE_DARWIN/${AARCH64}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_APPLE_DARWIN/${X86_64_MAC}/" "$FORMULA"
           sed -i "s/PLACEHOLDER_X86_64_UNKNOWN_LINUX_GNU/${LINUX}/" "$FORMULA"
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+      - uses: softprops/action-gh-release@7c4723f7a335432393329f8f1c564994ce50185d
         with:
           files: |
             dist/*

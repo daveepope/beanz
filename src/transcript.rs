@@ -374,15 +374,30 @@ pub const DOCUMENT_TASK_PHRASES: &[&str] = &[
     "capture this in a document",
 ];
 
+fn contains_phrase(haystack: &str, phrase: &str) -> bool {
+    let bytes = haystack.as_bytes();
+    let mut start = 0;
+    while let Some(offset) = haystack[start..].find(phrase) {
+        let match_start = start + offset;
+        let match_end = match_start + phrase.len();
+        let before_ok = match_start == 0 || !bytes[match_start - 1].is_ascii_alphanumeric();
+        let after_ok = match_end == bytes.len() || !bytes[match_end].is_ascii_alphanumeric();
+        if before_ok && after_ok {
+            return true;
+        }
+        start = match_start + 1;
+    }
+    false
+}
+
 pub fn is_document_task(text: &str) -> bool {
     let lowered = text.to_lowercase();
     if DOCUMENT_TASK_PHRASES
         .iter()
-        .any(|phrase| lowered.contains(*phrase))
+        .any(|phrase| contains_phrase(&lowered, phrase))
     {
         return true;
     }
-    let has_verb = DOCUMENT_TASK_VERBS.iter().any(|verb| lowered.contains(verb));
-    let has_noun = DOCUMENT_TASK_NOUNS.iter().any(|noun| lowered.contains(noun));
-    has_verb && has_noun
+    DOCUMENT_TASK_VERBS.iter().any(|verb| contains_phrase(&lowered, verb))
+        && DOCUMENT_TASK_NOUNS.iter().any(|noun| contains_phrase(&lowered, noun))
 }

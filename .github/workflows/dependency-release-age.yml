@@ -1,0 +1,33 @@
+name: Dependency Release Age
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+  push:
+    branches: [main]
+    paths:
+      - "Cargo.lock"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check dependency release age
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check dependency release age
+        env:
+          BEANZ_DEP_AGE_BASE_REF: >-
+            ${{
+              github.event_name == 'pull_request'
+              && github.event.pull_request.base.sha
+              || (github.event.before != '0000000000000000000000000000000000000000' && github.event.before || '')
+            }}
+        run: python3 scripts/check_dependency_release_age.py

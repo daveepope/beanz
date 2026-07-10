@@ -43,7 +43,7 @@ pub fn extract(events: &[Event]) -> Features {
             features.assistant_turns += 1;
             run += 1;
             features.max_autonomy_run = features.max_autonomy_run.max(run);
-            if awaiting_artifact {
+            if awaiting_artifact && event.code_edit_bytes == 0 && event.artifact_edit_bytes == 0 {
                 features.unlogged_artifact_chars += event.assistant_chars;
             }
         }

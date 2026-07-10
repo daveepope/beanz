@@ -1,5 +1,10 @@
 # beanz
 
+[![CI](https://github.com/daveepope/beanz/actions/workflows/build-test.yml/badge.svg?branch=main)](https://github.com/daveepope/beanz/actions/workflows/build-test.yml)
+[![codecov](https://codecov.io/gh/daveepope/beanz/graph/badge.svg?branch=main)](https://codecov.io/gh/daveepope/beanz)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/daveepope/beanz/badge)](https://scorecard.dev/viewer/?uri=github.com/daveepope/beanz)
+[![OSV-Scanner](https://github.com/daveepope/beanz/actions/workflows/osv-scanner.yml/badge.svg?branch=main)](https://github.com/daveepope/beanz/actions/workflows/osv-scanner.yml)
+
 <p align="center">
   <img src="assets/beanz-mascot.png" alt="beanz, sausage dog sitting beside a developer at work" width="480">
 </p>

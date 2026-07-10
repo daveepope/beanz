@@ -32,7 +32,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           tar czf "beanz-v${VERSION}-${TARGET}.tar.gz" -C "target/${TARGET}/release" beanz
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: beanz-${{ matrix.target }}
           path: beanz-v*.tar.gz

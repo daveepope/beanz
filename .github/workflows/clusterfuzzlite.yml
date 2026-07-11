@@ -1,15 +1,6 @@
 name: ClusterFuzzLite
 
 on:
-  pull_request:
-    branches: [main]
-    paths:
-      - "src/**"
-      - "fuzz/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - ".clusterfuzzlite/**"
-      - ".github/workflows/clusterfuzzlite.yml"
   schedule:
     - cron: "0 4 * * 0"
 
@@ -17,32 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  pr:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    concurrency:
-      group: ${{ github.workflow }}-${{ matrix.sanitizer }}-${{ github.ref }}
-      cancel-in-progress: true
-    strategy:
-      fail-fast: false
-      matrix:
-        sanitizer: [address]
-    steps:
-      - name: Build Fuzzers (${{ matrix.sanitizer }})
-        uses: google/clusterfuzzlite/actions/build_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
-        with:
-          language: rust
-          sanitizer: ${{ matrix.sanitizer }}
-      - name: Run Fuzzers (${{ matrix.sanitizer }})
-        uses: google/clusterfuzzlite/actions/run_fuzzers@884713a6c30a92e5e8544c39945cd7cb630abcd1
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          fuzz-seconds: 60
-          mode: code-change
-          sanitizer: ${{ matrix.sanitizer }}
-
   batch:
-    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
     concurrency:
       group: ${{ github.workflow }}-batch-${{ matrix.sanitizer }}

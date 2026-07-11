@@ -154,7 +154,7 @@ pub fn collect_all_files(root: &Path) -> Vec<PathBuf> {
                     stack.push(path);
                 }
             } else if file_type.is_file() {
-                found.push(path);
+                found.push(crate::workspace::normalize_workspace_path(root, path));
             }
         }
     }
@@ -390,7 +390,7 @@ pub struct ComplexityEngine {
 impl ComplexityEngine {
     pub fn new(root: PathBuf) -> Self {
         Self {
-            root,
+            root: crate::workspace::normalize_path(root),
             state: Arc::new(Mutex::new(DiskState::default())),
             watcher: None,
         }
@@ -415,6 +415,10 @@ impl ComplexityEngine {
                 &self.root,
                 &guard.session_open_bytes,
             ));
+            let touched: HashSet<PathBuf> = touched
+                .into_iter()
+                .map(|path| crate::workspace::normalize_workspace_path(&self.root, path))
+                .collect();
             reconstruct_baseline(
                 &self.root,
                 edit_ops,
@@ -444,7 +448,10 @@ impl ComplexityEngine {
                         continue;
                     }
                     if let Ok(mut guard) = state.lock() {
-                        guard.disk_touched.insert(path);
+                        guard.disk_touched.insert(crate::workspace::normalize_workspace_path(
+                            &root,
+                            path,
+                        ));
                     }
                 }
             })?;

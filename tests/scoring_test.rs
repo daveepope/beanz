@@ -281,14 +281,51 @@ fn artifact_debt_rises_with_spec_gap() {
 }
 
 #[test]
-fn artifact_debt_rises_with_unlogged_spec_gap() {
+fn artifact_debt_rises_with_chat_artifact_chars() {
     let bare = artifact_debt(&moderate_dump(), &WeightProfile::normal());
-    let blind = artifact_debt(&Features {
-        unlogged_spec_gap: 200.0,
-        ..moderate_dump()
-    }, &WeightProfile::normal());
-    assert!(blind > bare);
+    let chat = artifact_debt(
+        &Features {
+            unlogged_artifact_chars: 32_780,
+            ..Features::default()
+        },
+        &WeightProfile::normal(),
+    );
+    assert!(chat > bare);
+    assert!(chat >= 100.0, "chat artifact_debt {chat}");
 }
+
+#[test]
+fn volume_counts_chat_artifact_chars_and_bytes() {
+    let chat_only = artifact_debt(
+        &Features {
+            unlogged_artifact_chars: 25_600,
+            ..Features::default()
+        },
+        &WeightProfile::normal(),
+    );
+    let disk_only = artifact_debt(
+        &Features {
+            bytes_delta: 25_600,
+            ..Features::default()
+        },
+        &WeightProfile::normal(),
+    );
+    assert_eq!(chat_only, disk_only);
+}
+
+#[test]
+fn artifact_debt_ignores_unlogged_spec_gap_without_chat_chars() {
+    let bare = artifact_debt(&moderate_dump(), &WeightProfile::normal());
+    let ratio_only = artifact_debt(
+        &Features {
+            unlogged_spec_gap: 200.0,
+            ..moderate_dump()
+        },
+        &WeightProfile::normal(),
+    );
+    assert_eq!(ratio_only, bare);
+}
+
 
 #[test]
 fn artifact_debt_ignores_code_spec_gap() {

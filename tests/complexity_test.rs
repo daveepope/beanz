@@ -268,3 +268,48 @@ fn engine_detects_markdown_file_as_artifact_bytes_only() {
     engine.stop();
     fs::remove_dir_all(&root).ok();
 }
+
+#[test]
+fn engine_preexisting_artifacts_idle_zero_bytes_delta() {
+    use beanz::complexity::ComplexityEngine;
+
+    let root = std::env::temp_dir().join(format!(
+        "beanz-engine-idle-artifact-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+    ));
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("README.md"), "# Title\n\nSome prose.\n").unwrap();
+    fs::write(root.join("Cargo.lock"), "[package]\n").unwrap();
+
+    let mut engine = ComplexityEngine::new(root.clone());
+    engine.start().unwrap();
+    engine.sync_from_session(&[]);
+
+    assert_eq!(engine.bytes_delta(), 0);
+    assert!(engine.deltas().is_empty());
+    engine.stop();
+    fs::remove_dir_all(&root).ok();
+}
+
+#[test]
+fn engine_preexisting_artifact_deletion_reports_negative_bytes_delta() {
+    use beanz::complexity::ComplexityEngine;
+
+    let root = std::env::temp_dir().join(format!(
+        "beanz-engine-delete-artifact-{}-{:?}",
+        std::process::id(),
+        std::time::SystemTime::now()
+    ));
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join("README.md"), "# Title\n\nSome prose.\n").unwrap();
+
+    let mut engine = ComplexityEngine::new(root.clone());
+    engine.start().unwrap();
+    fs::remove_file(root.join("README.md")).unwrap();
+    engine.sync_from_session(&[]);
+
+    assert!(engine.bytes_delta() < 0);
+    engine.stop();
+    fs::remove_dir_all(&root).ok();
+}

@@ -287,7 +287,11 @@ fn artifact_feature_lines(features: &Features) -> Vec<FeatureLine> {
     lines.extend([
         FeatureLine {
             label: "spec_gap_risk",
-            value: format_spec_gap(features.artifact_spec_gap + features.unlogged_spec_gap),
+            value: format_spec_gap(features.artifact_spec_gap),
+        },
+        FeatureLine {
+            label: "chat_spec_gap",
+            value: format_spec_gap(features.unlogged_spec_gap),
         },
         FeatureLine {
             label: "bytes",
@@ -354,10 +358,9 @@ fn artifact_suggestions(
     }
     let trunc = truncation(features, profile);
     let middle = middle_burial(features, profile);
-    let spec_gap_score = (SPEC_GAP_WEIGHT
-        * (features.artifact_spec_gap + features.unlogged_spec_gap)
-        * profile.spec_gap)
-        .min(SPEC_GAP_CAP);
+    let spec_gap_score = (SPEC_GAP_WEIGHT * features.artifact_spec_gap * profile.spec_gap).min(SPEC_GAP_CAP);
+    let chat_spec_gap_score =
+        (SPEC_GAP_WEIGHT * features.unlogged_spec_gap * profile.spec_gap).min(SPEC_GAP_CAP);
     let scale = profile.suggestion_threshold;
 
     let mut ranked: Vec<(&'static str, f64)> = Vec::new();
@@ -369,6 +372,9 @@ fn artifact_suggestions(
     }
     if spec_gap_score >= SPEC_GAP_SUGGESTION * scale {
         ranked.push(("spec_gap_risk", spec_gap_score));
+    }
+    if chat_spec_gap_score >= SPEC_GAP_SUGGESTION * scale {
+        ranked.push(("chat_spec_gap", chat_spec_gap_score));
     }
     top_suggestions(ranked, 3)
 }
@@ -564,6 +570,23 @@ mod tests {
         };
         let table = format_debt_table(10.0, 35.0, &features, &normal(), false);
         assert!(table.contains("lost_in_the_middle_risk"));
+    }
+
+    #[test]
+    fn format_debt_table_chat_prd_shows_chat_spec_gap() {
+        let features = Features {
+            user_turns: 6,
+            assistant_turns: 8,
+            prompt_chars: 9_000,
+            unlogged_artifact_chars: 38_581,
+            unlogged_spec_gap: 38_581.0 / 9_000.0,
+            probe_hits: 7,
+            ..Features::default()
+        };
+        let table = format_debt_table(14.0, 100.0, &features, &normal(), false);
+        assert!(table.contains("chat_spec_gap"));
+        assert!(table.contains("4.29") || table.contains("4.3"));
+        assert!(table.contains("chat_artifact_chars"));
     }
 
     #[test]

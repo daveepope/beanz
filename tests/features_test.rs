@@ -26,10 +26,23 @@ fn assistant_read() -> Event {
 }
 
 fn user_document_task(prompt_chars: usize) -> Event {
+    user_document_task_with_probes(prompt_chars, 0)
+}
+
+fn user_document_task_with_probes(prompt_chars: usize, probe_hits: usize) -> Event {
     Event {
         role_user: true,
         prompt_chars,
         document_task: true,
+        probe_hits,
+        ..Event::default()
+    }
+}
+
+fn assistant_artifact_edit(artifact_edit_bytes: usize) -> Event {
+    Event {
+        role_user: false,
+        artifact_edit_bytes,
         ..Event::default()
     }
 }
@@ -123,7 +136,7 @@ fn extract_plain_prompt_ignores_assistant_chars() {
 }
 
 #[test]
-fn extract_document_task_window_closes_on_next_user_turn() {
+fn extract_document_task_stays_active_after_interrupt_user_turn() {
     let events = [
         user_document_task(20),
         assistant_text(500),
@@ -131,5 +144,74 @@ fn extract_document_task_window_closes_on_next_user_turn() {
         assistant_text(300),
     ];
     let features = extract(&events);
-    assert_eq!(features.unlogged_artifact_chars, 500);
+    assert_eq!(features.unlogged_artifact_chars, 800);
+}
+
+#[test]
+fn extract_document_task_prompt_probes_do_not_count() {
+    let events = [
+        user_document_task_with_probes(100, 18),
+        assistant_text(1_000),
+    ];
+    let features = extract(&events);
+    assert_eq!(features.probe_hits, 0);
+    assert_eq!(features.unlogged_artifact_chars, 1_000);
+}
+
+#[test]
+fn extract_steering_probes_count_after_document_task() {
+    let events = [
+        user_document_task_with_probes(100, 18),
+        assistant_text(1_000),
+        user(50, 2),
+    ];
+    let features = extract(&events);
+    assert_eq!(features.probe_hits, 2);
+}
+
+#[test]
+fn extract_document_task_closes_after_delivery_on_new_user_turn() {
+    let events = [
+        user_document_task(20),
+        assistant_text(5_000),
+        user(20, 0),
+        assistant_text(3_000),
+    ];
+    let features = extract(&events);
+    assert_eq!(features.unlogged_artifact_chars, 5_000);
+}
+
+#[test]
+fn extract_file_artifact_edit_stops_chat_counting() {
+    let events = [
+        user_document_task(20),
+        assistant_artifact_edit(500),
+        assistant_text(3_000),
+    ];
+    let features = extract(&events);
+    assert_eq!(features.unlogged_artifact_chars, 0);
+    assert_eq!(features.artifact_edit_bytes, 500);
+}
+
+#[test]
+fn extract_chat_prd_after_interrupt_raises_artifact_debt() {
+    use beanz::{grade, report, Leniency};
+
+    let events = [
+        user_document_task_with_probes(8_569, 18),
+        assistant_text(108),
+        assistant_text(10),
+        assistant_text(10),
+        assistant_text(76),
+        user(130, 0),
+        assistant_text(106),
+        assistant_text(10),
+        assistant_text(32_460),
+    ];
+    let features = extract(&events);
+    let built = report(features, Leniency::Normal);
+    assert_eq!(built.features.unlogged_artifact_chars, 32_780);
+    assert_eq!(built.features.probe_hits, 0);
+    assert!(built.artifact_debt >= 75.0, "artifact_debt {}", built.artifact_debt);
+    assert_eq!(grade(built.artifact_debt), beanz::Grade::Severe);
 }

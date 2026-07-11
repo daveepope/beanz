@@ -144,3 +144,26 @@ fn format_debt_table_shows_severe_middle_in_features() {
     assert!(table.contains("lost_in_the_middle_risk"));
     assert!(table.contains("severe"));
 }
+
+#[test]
+fn format_debt_table_artifact_suggestions_chat_spec_gap() {
+    let features = Features {
+        prompt_chars: 9_000,
+        unlogged_artifact_chars: 38_581,
+        unlogged_spec_gap: 30.0,
+        user_turns: 6,
+        assistant_turns: 8,
+        ..Features::default()
+    };
+    let table = format_debt_table(BELOW, ABOVE, &features, &WeightProfile::normal(), false);
+    let artifact_row = table
+        .lines()
+        .find(|line| line.contains("artifact cognitive debt"))
+        .expect("artifact row");
+    let suggestion = artifact_row
+        .split('│')
+        .nth(5)
+        .map(str::trim)
+        .unwrap_or("");
+    assert_eq!(suggestion, "chat_spec_gap");
+}

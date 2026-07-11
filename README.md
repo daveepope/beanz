@@ -6,9 +6,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/daveepope/beanz/badge)](https://scorecard.dev/viewer/?uri=github.com/daveepope/beanz)
 [![OSV Lockfile Scan](https://img.shields.io/github/actions/workflow/status/daveepope/beanz/osv-scanner.yml?branch=main&label=OSV%20Lockfile%20Scan)](https://github.com/daveepope/beanz/actions/workflows/osv-scanner.yml)
-[![Dependency Vulnerability Scan](https://img.shields.io/github/actions/workflow/status/daveepope/beanz/dependency-review.yml?branch=main&label=Dependency%20Vulnerability%20Scan)](https://github.com/daveepope/beanz/actions/workflows/dependency-review.yml)
+[![Dependency Vulnerability Scan](https://img.shields.io/github/actions/workflow/status/daveepope/beanz/dependency-review.yml?label=Dependency%20Vulnerability%20Scan)](https://github.com/daveepope/beanz/actions/workflows/dependency-review.yml)
 [![Supply Chain Protection](https://img.shields.io/github/actions/workflow/status/daveepope/beanz/dependency-release-age.yml?branch=main&label=Supply%20Chain%20Protection%20(%3C3d))](https://github.com/daveepope/beanz/actions/workflows/dependency-release-age.yml)
-[![ClusterFuzzLite](https://img.shields.io/github/actions/workflow/status/daveepope/beanz/clusterfuzzlite.yml?branch=main&label=ClusterFuzzLite)](https://github.com/daveepope/beanz/actions/workflows/clusterfuzzlite.yml)
+[![ClusterFuzzLite](https://img.shields.io/github/actions/workflow/status/daveepope/beanz/clusterfuzzlite.yml?label=ClusterFuzzLite)](https://github.com/daveepope/beanz/actions/workflows/clusterfuzzlite.yml)
 
 <p align="center">
   <img src="assets/beanz-mascot.png" alt="beanz, sausage dog sitting beside a developer at work" width="480">

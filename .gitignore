@@ -2,3 +2,6 @@
 /lcov.info
 __pycache__/
 *.pyc
+fuzz/artifacts/
+fuzz/corpus/
+fuzz/target/

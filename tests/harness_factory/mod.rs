@@ -44,6 +44,10 @@ impl HarnessFactory {
         render_write_at(self.harness, path, contents)
     }
 
+    pub fn assistant_text_line(&self, text: &str) -> String {
+        render_assistant_text(self.harness, text)
+    }
+
     pub fn session(&self) -> Session {
         Session {
             harness: self.harness,
@@ -79,6 +83,11 @@ impl Session {
         self
     }
 
+    pub fn assistant_text(mut self, text: &str) -> Self {
+        self.lines.push(render_assistant_text(self.harness, text));
+        self
+    }
+
     pub fn write(mut self, bytes: usize) -> Self {
         self.lines.push(render_write(self.harness, bytes));
         self
@@ -94,6 +103,18 @@ impl Session {
         path.push(format!("beanz_{}_{}.jsonl", std::process::id(), unique));
         std::fs::write(&path, self.lines.join("\n")).unwrap();
         path
+    }
+}
+
+fn render_assistant_text(harness: AgentHarness, text: &str) -> String {
+    let encoded = serde_json::to_string(text).unwrap();
+    match harness {
+        AgentHarness::Cursor => format!(
+            r#"{{"role":"assistant","message":{{"content":[{{"type":"text","text":{encoded}}}]}}}}"#
+        ),
+        AgentHarness::Claude => format!(
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":{encoded}}}]}}}}"#
+        ),
     }
 }
 

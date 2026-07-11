@@ -1,3 +1,4 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 pub fn resolve_workspace(
@@ -15,7 +16,24 @@ pub fn resolve_workspace(
             return canonicalize_lossy(path.to_path_buf());
         }
     }
-    git_root(cwd).unwrap_or_else(|| cwd.to_path_buf())
+    git_root(cwd)
+        .map(canonicalize_lossy)
+        .unwrap_or_else(|| cwd.to_path_buf())
+}
+
+pub fn normalize_path(path: impl AsRef<Path>) -> PathBuf {
+    let path = path.as_ref().to_path_buf();
+    canonicalize_lossy(path)
+}
+
+pub fn normalize_workspace_path(workspace: &Path, path: PathBuf) -> PathBuf {
+    if !path.is_absolute() {
+        let under_workspace = normalize_path(workspace.join(&path));
+        if fs::metadata(&under_workspace).is_ok() {
+            return under_workspace;
+        }
+    }
+    normalize_path(path)
 }
 
 pub fn workspace_root() -> Option<PathBuf> {

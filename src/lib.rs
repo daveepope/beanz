@@ -29,4 +29,4 @@ pub use cli::run;
 pub use strictness::{resolve_leniency, resolve_leniency_inputs, Leniency, WeightProfile};
 pub use session::SessionEngine;
 pub use transcript::{count_probes, Event, Role};
-pub use workspace::{git_root, resolve_workspace, workspace_root};
+pub use workspace::{git_root, normalize_path, normalize_workspace_path, resolve_workspace, workspace_root};

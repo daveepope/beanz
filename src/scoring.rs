@@ -152,10 +152,7 @@ pub fn session_debt(features: &Features, profile: &WeightProfile) -> f64 {
 }
 
 pub fn artifact_debt(features: &Features, profile: &WeightProfile) -> f64 {
-    let spec_gap = spec_gap_bump(
-        features.artifact_spec_gap + features.unlogged_spec_gap,
-        profile,
-    );
+    let spec_gap = spec_gap_bump(features.artifact_spec_gap, profile);
     let gross = shared_pressure(features, profile) + spec_gap + volume(features, profile).max(0.0);
     let discount = PROBE_WEIGHT * features.probe_hits as f64 * profile.probe_relief;
     round_debt((gross - discount).max(0.0))
@@ -206,5 +203,7 @@ fn pressure_grade(risk: f64) -> Grade {
 }
 
 fn volume(features: &Features, profile: &WeightProfile) -> f64 {
-    BYTES_WEIGHT * features.bytes_delta as f64 * profile.bytes
+    let bytes = features.bytes_delta.max(0) as f64;
+    let chat = features.unlogged_artifact_chars as f64;
+    BYTES_WEIGHT * (bytes + chat) * profile.bytes
 }

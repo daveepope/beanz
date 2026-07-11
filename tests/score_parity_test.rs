@@ -1,5 +1,6 @@
 mod harness_factory;
 
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::ffi::OsString;
@@ -319,6 +320,139 @@ fn reverse_replay_strreplace_prefix_new_string_terminates() {
         maps.baseline_bytes.get(&source).copied(),
         Some(expected_baseline.len() as u64)
     );
+}
+
+#[test]
+fn reconstruct_baseline_watcher_touched_artifact_uses_session_open_bytes() {
+    let workspace = workspace_with_src("artifact-baseline");
+    let readme = workspace.join("README.md");
+    let lock = workspace.join("Cargo.lock");
+    fs::write(&readme, "# Title\n\nSome prose.\n").unwrap();
+    fs::write(&lock, "[package]\n").unwrap();
+
+    let session_open = beanz::complexity::baseline_complexity(&workspace);
+    let session_open_bytes = beanz::complexity::baseline_bytes(&workspace);
+    let mut touched = HashSet::new();
+    touched.insert(readme.clone());
+    touched.insert(lock.clone());
+
+    let maps = reconstruct_baseline(
+        &workspace,
+        &[],
+        &touched,
+        &session_open,
+        &session_open_bytes,
+    );
+    fs::remove_dir_all(&workspace).ok();
+
+    assert_eq!(
+        maps.baseline_bytes.get(&readme).copied(),
+        session_open_bytes.get(&readme).copied()
+    );
+    assert_eq!(
+        maps.current_bytes.get(&readme).copied(),
+        session_open_bytes.get(&readme).copied()
+    );
+    assert_eq!(
+        maps.baseline_bytes.get(&lock).copied(),
+        session_open_bytes.get(&lock).copied()
+    );
+    assert_eq!(
+        maps.current_bytes.get(&lock).copied(),
+        session_open_bytes.get(&lock).copied()
+    );
+    assert_eq!(
+        beanz::bytes_delta(&maps.baseline_bytes, &maps.current_bytes),
+        0
+    );
+}
+
+#[test]
+#[cfg(unix)]
+fn reconstruct_baseline_symlink_touched_path_matches_snapshot() {
+    let workspace = workspace_with_src("artifact-alias");
+    let readme = workspace.join("README.md");
+    let alias = workspace.join("readme-alias.md");
+    fs::write(&readme, "# Title\n\nSome prose.\n").unwrap();
+    std::os::unix::fs::symlink(&readme, &alias).unwrap();
+
+    let session_open = beanz::complexity::baseline_complexity(&workspace);
+    let session_open_bytes = beanz::complexity::baseline_bytes(&workspace);
+    let mut touched = HashSet::new();
+    touched.insert(alias);
+
+    let maps = reconstruct_baseline(
+        &workspace,
+        &[],
+        &touched,
+        &session_open,
+        &session_open_bytes,
+    );
+    fs::remove_dir_all(&workspace).ok();
+
+    let canonical = beanz::normalize_path(&readme);
+    assert_eq!(
+        maps.baseline_bytes.get(&canonical).copied(),
+        session_open_bytes.get(&canonical).copied()
+    );
+    assert_eq!(
+        maps.current_bytes.get(&canonical).copied(),
+        session_open_bytes.get(&canonical).copied()
+    );
+    assert_eq!(
+        beanz::bytes_delta(&maps.baseline_bytes, &maps.current_bytes),
+        0
+    );
+}
+
+#[test]
+fn read_only_session_preexisting_artifacts_zero_bytes_delta() {
+    let workspace = workspace_with_src("artifact-idle");
+    fs::write(workspace.join("README.md"), "# Title\n\nSome prose.\n").unwrap();
+    fs::write(workspace.join("Cargo.lock"), "[package]\n").unwrap();
+
+    let factory = HarnessFactory::cursor();
+    let session_path = factory.session().user("hi").to_file();
+
+    let mut harness = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), Leniency::Normal);
+    harness.start().unwrap();
+    let report = harness.calculate();
+    let deltas = harness.complexity_deltas();
+    harness.stop();
+
+    fs::remove_file(&session_path).ok();
+    fs::remove_dir_all(&workspace).ok();
+
+    assert_eq!(report.features.bytes_delta, 0);
+    assert_eq!(report.artifact_debt, 0.0);
+    assert!(deltas.is_empty());
+}
+
+#[test]
+fn chat_prd_transcript_scores_severe_artifact_debt() {
+    let workspace = workspace_with_src("chat-prd-e2e");
+    let prd_body = "# Session Replay PRD\n\n".to_string() + &"x".repeat(32_000);
+    let factory = HarnessFactory::cursor();
+    let session_path = factory
+        .session()
+        .user("Write a PRD in this chat for session replay. Outline the requirements.")
+        .assistant_text("Exploring the codebase first.")
+        .user("stop creating files on disk")
+        .assistant_text(&prd_body)
+        .to_file();
+
+    let mut harness = AgentHarness::Cursor.open_in(session_path.clone(), workspace.clone(), Leniency::Normal);
+    harness.start().unwrap();
+    let report = harness.calculate();
+    harness.stop();
+
+    fs::remove_file(&session_path).ok();
+    fs::remove_dir_all(&workspace).ok();
+
+    assert!(report.features.unlogged_artifact_chars > 30_000);
+    assert_eq!(report.features.probe_hits, 0);
+    assert!(report.artifact_debt >= 75.0, "artifact_debt {}", report.artifact_debt);
+    assert_eq!(beanz::grade(report.artifact_debt), beanz::Grade::Severe);
 }
 
 #[test]

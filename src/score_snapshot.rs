@@ -29,11 +29,16 @@ pub fn reconstruct_baseline(
     }
 
     let transcript_paths = touched_from_edit_ops(root, edit_ops);
+    let normalized_touched: HashSet<PathBuf> = touched
+        .iter()
+        .cloned()
+        .map(|path| crate::workspace::normalize_workspace_path(root, path))
+        .collect();
     let replayed = replay_baseline(root, edit_ops, &transcript_paths);
     let mut baseline = HashMap::new();
     let mut baseline_bytes_map = HashMap::new();
 
-    for path in touched {
+    for path in &normalized_touched {
         if transcript_paths.contains(path) {
             if let Some(content) = replayed.get(path).and_then(|value| value.as_ref()) {
                 baseline_bytes_map.insert(path.clone(), content.len() as u64);
@@ -45,20 +50,24 @@ pub fn reconstruct_baseline(
                 if let Some(&size) = session_open_bytes.get(path) {
                     baseline_bytes_map.insert(path.clone(), size);
                 }
+            } else if let Some(&size) = session_open_bytes.get(path) {
+                baseline_bytes_map.insert(path.clone(), size);
             }
         } else if let Some(&value) = session_open.get(path) {
             baseline.insert(path.clone(), value);
             if let Some(&size) = session_open_bytes.get(path) {
                 baseline_bytes_map.insert(path.clone(), size);
             }
+        } else if let Some(&size) = session_open_bytes.get(path) {
+            baseline_bytes_map.insert(path.clone(), size);
         }
     }
 
     ScoreMaps {
         baseline,
-        current: current_for_paths(touched),
+        current: current_for_paths(&normalized_touched),
         baseline_bytes: baseline_bytes_map,
-        current_bytes: bytes_for_paths(touched),
+        current_bytes: bytes_for_paths(&normalized_touched),
     }
 }
 
@@ -107,11 +116,12 @@ pub fn touched_from_edit_ops(root: &Path, edit_ops: &[EditOp]) -> HashSet<PathBu
 }
 
 fn resolve_path(root: &Path, path: &Path) -> PathBuf {
-    if path.is_absolute() {
+    let resolved = if path.is_absolute() {
         path.to_path_buf()
     } else {
         root.join(path)
-    }
+    };
+    crate::workspace::normalize_workspace_path(root, resolved)
 }
 
 fn reverse_apply(content: &mut Option<String>, op: &EditOp) {

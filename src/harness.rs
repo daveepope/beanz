@@ -178,10 +178,6 @@ impl Harness for SessionHarness {
             features.code_edit_bytes = 0;
             features.code_spec_gap = 0.0;
         }
-        if features.bytes_delta == 0 {
-            features.artifact_edit_bytes = 0;
-            features.artifact_spec_gap = 0.0;
-        }
         features
     }
 

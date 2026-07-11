@@ -1,5 +1,7 @@
 use crate::transcript::Event;
 
+const ARTIFACT_DELIVERY_CHARS: usize = 2_000;
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Features {
     pub user_turns: usize,
@@ -30,21 +32,42 @@ pub fn transcript_chars(features: &Features) -> usize {
 pub fn extract(events: &[Event]) -> Features {
     let mut features = Features::default();
     let mut run = 0usize;
-    let mut awaiting_artifact = false;
+    let mut document_task_active = false;
+    let mut artifact_delivered = false;
+    let mut document_task_chat_chars = 0usize;
 
     for event in events {
         if event.role_user {
             features.user_turns += 1;
             features.prompt_chars += event.prompt_chars;
-            features.probe_hits += event.probe_hits;
+            if !event.document_task {
+                features.probe_hits += event.probe_hits;
+            }
             run = 0;
-            awaiting_artifact = event.document_task;
+            if event.document_task {
+                document_task_active = true;
+                artifact_delivered = false;
+                document_task_chat_chars = 0;
+            } else if artifact_delivered {
+                document_task_active = false;
+            }
         } else {
             features.assistant_turns += 1;
             run += 1;
             features.max_autonomy_run = features.max_autonomy_run.max(run);
-            if awaiting_artifact && event.code_edit_bytes == 0 && event.artifact_edit_bytes == 0 {
+            if document_task_active
+                && event.code_edit_bytes == 0
+                && event.artifact_edit_bytes == 0
+            {
                 features.unlogged_artifact_chars += event.assistant_chars;
+                document_task_chat_chars += event.assistant_chars;
+                if document_task_chat_chars >= ARTIFACT_DELIVERY_CHARS {
+                    artifact_delivered = true;
+                }
+            }
+            if event.artifact_edit_bytes > 0 {
+                document_task_active = false;
+                artifact_delivered = true;
             }
         }
         features.assistant_chars += event.assistant_chars;

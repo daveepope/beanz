@@ -1,5 +1,6 @@
 /target
 /lcov.info
+.idea/
 __pycache__/
 *.pyc
 fuzz/artifacts/

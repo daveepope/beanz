@@ -2,7 +2,7 @@ class Beanz < Formula
   desc "Cognitive debt scoring for AI coding sessions"
   homepage "https://github.com/daveepope/beanz"
   license "MIT"
-  version "1.1.0"
+  version "1.2.0"
 
   head do
     url "https://github.com/daveepope/beanz.git", branch: "main"
@@ -11,18 +11,18 @@ class Beanz < Formula
 
   on_macos do
     on_arm do
-      url "https://github.com/daveepope/beanz/releases/download/v1.1.0/beanz-v1.1.0-aarch64-apple-darwin.tar.gz"
-      sha256 "38139fd831380b63c87a5a0c109efa19a31d9c1c0055b252588570dcc8bd0d0e"
+      url "https://github.com/daveepope/beanz/releases/download/v1.2.0/beanz-v1.2.0-aarch64-apple-darwin.tar.gz"
+      sha256 "2d7abd72f56723b42344b02bf93137b25f88bd76a9e21b0fad56a1713649275c"
     end
     on_intel do
-      url "https://github.com/daveepope/beanz/releases/download/v1.1.0/beanz-v1.1.0-x86_64-apple-darwin.tar.gz"
-      sha256 "47281f833a1e3c7b84f4bb9cf5e06cfa081907475794e24519b3db8dbc24336a"
+      url "https://github.com/daveepope/beanz/releases/download/v1.2.0/beanz-v1.2.0-x86_64-apple-darwin.tar.gz"
+      sha256 "eadb6a14eeb946df33b3da384ae3424e9f72982e6d60ef082bd3fc2ca1757d62"
     end
   end
 
   on_linux do
-    url "https://github.com/daveepope/beanz/releases/download/v1.1.0/beanz-v1.1.0-x86_64-unknown-linux-gnu.tar.gz"
-    sha256 "b66e3e4332e8756a2b88e29d7afc1b7b653e285e3030cfc07e2221994e6e6c10"
+    url "https://github.com/daveepope/beanz/releases/download/v1.2.0/beanz-v1.2.0-x86_64-unknown-linux-gnu.tar.gz"
+    sha256 "df3c87ad2d103403130dd41d337ec476de4b6315c683a990d7b94b83104c5e28"
   end
 
   def install

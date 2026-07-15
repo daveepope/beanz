@@ -1,7 +1,12 @@
 use beanz::{
-    artifact_debt, report, resolve_leniency_inputs, session_debt, Features, Leniency,
-    WeightProfile,
+    artifact_debt, report, resolve_leniency, resolve_leniency_inputs, session_debt, Features,
+    Leniency, WeightProfile,
 };
+
+#[test]
+fn resolve_leniency_reads_current_env_without_panic() {
+    let _ = resolve_leniency(false, false);
+}
 
 fn heavy_features() -> Features {
     Features {

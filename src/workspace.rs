@@ -66,3 +66,15 @@ pub fn git_root(start: &Path) -> Option<PathBuf> {
 fn canonicalize_lossy(path: PathBuf) -> PathBuf {
     std::fs::canonicalize(&path).unwrap_or(path)
 }
+
+pub(crate) fn slug_path(path: &Path, trim_leading_slash: bool, extra_chars: &[char]) -> String {
+    let text = path.to_string_lossy();
+    let trimmed = if trim_leading_slash {
+        text.trim_start_matches('/')
+    } else {
+        text.as_ref()
+    };
+    let mut replace_chars = vec!['/'];
+    replace_chars.extend_from_slice(extra_chars);
+    trimmed.replace(replace_chars.as_slice(), "-")
+}

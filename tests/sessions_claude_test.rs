@@ -4,9 +4,26 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use beanz::claude::{
-    find_new_session, latest_session_at, latest_session_in, newest_session, scan_sessions,
-    session_root, wait_for_new_session_at, wait_for_new_session_in,
+    find_new_session, latest_session, latest_session_at, latest_session_in, newest_session,
+    scan_sessions, session_root, transcripts_root, wait_for_new_session_at,
+    wait_for_new_session_in,
 };
+
+#[test]
+fn transcripts_root_reads_process_env() {
+    if std::env::var_os("HOME").is_none() {
+        return;
+    }
+    let _ = transcripts_root();
+}
+
+#[test]
+fn latest_session_runs_env_wrapper() {
+    if std::env::var_os("HOME").is_none() {
+        return;
+    }
+    let _ = latest_session();
+}
 
 fn temp_root(tag: &str) -> PathBuf {
     let unique = format!(
@@ -31,6 +48,18 @@ fn session_root_maps_workspace_to_claude_layout() {
     assert_eq!(
         root,
         Path::new("/home/user/.claude/projects/-home-user-repos-arena")
+    );
+}
+
+#[test]
+fn session_root_workspace_with_dots_replaces_dots() {
+    let root = session_root(
+        Path::new("/home/john.doe"),
+        Path::new("/home/john.doe/repos/arena"),
+    );
+    assert_eq!(
+        root,
+        Path::new("/home/john.doe/.claude/projects/-home-john-doe-repos-arena")
     );
 }
 

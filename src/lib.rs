@@ -1,4 +1,4 @@
-mod cli;
+pub mod cli;
 pub mod claude;
 pub mod complexity;
 pub mod cursor;

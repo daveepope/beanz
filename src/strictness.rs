@@ -116,16 +116,6 @@ pub fn resolve_leniency_inputs(
     Ok(Leniency::Normal)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn resolve_leniency_reads_current_env_without_panic() {
-        let _ = resolve_leniency(false, false);
-    }
-}
-
 fn env_enabled(name: &str) -> bool {
     std::env::var(name)
         .map(|value| {

@@ -62,9 +62,15 @@ brew trust daveepope/beanz
 brew install beanz
 ```
 
+If `brew tap` fails, install directly from the formula file instead:
+
+```bash
+brew install https://raw.githubusercontent.com/daveepope/beanz/main/Formula/beanz.rb
+```
+
 ### Commands
 
-Watch the next Cursor session you start (default):
+Watch the next Claude Code session you start (default):
 
 ```bash
 beanz watch
@@ -103,7 +109,7 @@ beanz --help
 | `--help` | `-h` | Print usage and exit |
 | `watch` | | Live debt table for a session (default command) |
 | `score` | | One-shot score for a session |
-| `--harness <name>` | `-H` | Agent backend (default: `cursor`) |
+| `--harness <name>` | `-H` | Agent backend (default: `claude`) |
 | `--workspace <path>` | `-W` | Workspace root for session discovery |
 | `--home <path>` | | Home directory for agent data (default: `$HOME`) |
 | `--watch-ticks <n>` | | Limit watch to `n` samples (for tests/automation) |
@@ -114,7 +120,7 @@ beanz --help
 
 Environment variables (when `--lenient` / `--strict` not set): `BEANZ_LENIENT=1`, `BEANZ_STRICT=1`.
 
-**Defaults:** no args → `watch` the next session you start; `score` with no path → most recent session in Cursor transcripts.
+**Defaults:** no args → `watch` the next session you start; `score` with no path → most recent session in Claude transcripts.
 
 ### Example output
 

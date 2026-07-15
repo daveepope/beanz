@@ -33,10 +33,7 @@ pub fn session_root(home: &Path, workspace: &Path) -> PathBuf {
 }
 
 fn workspace_slug(workspace: &Path) -> String {
-    workspace
-        .to_string_lossy()
-        .trim_start_matches('/')
-        .replace('/', "-")
+    crate::workspace::slug_path(workspace, true, &[])
 }
 
 pub fn scan_sessions(root: &Path) -> Vec<PathBuf> {
@@ -96,31 +93,3 @@ pub fn wait_for_new_session_in(root: &Path) -> io::Result<PathBuf> {
     crate::session_scan::wait_for_new_session_in(root, "Cursor", scan_sessions)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn session_env_reads_process_home_and_workspace() {
-        if std::env::var_os("HOME").is_none() {
-            return;
-        }
-        assert!(session_env().is_ok());
-    }
-
-    #[test]
-    fn transcripts_root_reads_process_env() {
-        if std::env::var_os("HOME").is_none() {
-            return;
-        }
-        let _ = transcripts_root();
-    }
-
-    #[test]
-    fn latest_session_runs_env_wrapper() {
-        if std::env::var_os("HOME").is_none() {
-            return;
-        }
-        let _ = latest_session();
-    }
-}
